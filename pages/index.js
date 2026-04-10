@@ -1,88 +1,85 @@
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/router'
 import Head from 'next/head'
+import Link from 'next/link'
 
 export default function Home() {
-  const router = useRouter()
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    if (router.query.error) {
-      const msgs = {
-        oauth_denied: 'Connection was cancelled. Please try again.',
-        token_failed: 'Could not connect to Square. Check your API credentials.',
-        server_error: 'An unexpected error occurred. Please try again.',
-      }
-      setError(msgs[router.query.error] || 'Something went wrong.')
-    }
-  }, [router.query])
-
-  async function connectSquare() {
-    setLoading(true)
-    const res = await fetch('/api/square/auth')
-    const { url } = await res.json()
-    window.location.href = url
-  }
-
   return (
     <>
       <Head>
-        <title>Caféos — Real-time business valuation</title>
+        <title>Caféos — The operating system for café profitability</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
-      <div style={styles.page}>
-        <nav style={styles.nav}>
-          <span style={styles.logo}>☕ Caféos</span>
-        </nav>
-        <main style={styles.main}>
-          <div style={styles.hero}>
-            <div style={styles.badge}>Powered by Square POS</div>
-            <h1 style={styles.title}>Know what your<br /><em>café is worth</em></h1>
-            <p style={styles.subtitle}>Connect your Square account and get an instant, data-driven business valuation based on your real sales — updated live.</p>
-            {error && <div style={styles.errorBox}>{error}</div>}
-            <button style={{ ...styles.connectBtn, opacity: loading ? 0.7 : 1 }} onClick={connectSquare} disabled={loading}>
-              {loading ? 'Connecting...' : 'Connect with Square'}
-              {!loading && <span style={styles.arrow}>→</span>}
-            </button>
-            <p style={styles.privacy}>Caféos only reads your sales data. We never store your Square credentials.</p>
+      <div style={s.page}>
+        <nav style={s.nav}>
+          <span style={s.logo}>☕ Caféos</span>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <Link href="/login"><button className="btn-secondary" style={{ padding: '8px 20px', fontSize: '14px' }}>Sign in</button></Link>
+            <Link href="/signup"><button className="btn-primary" style={{ padding: '8px 20px', fontSize: '14px' }}>Get started free</button></Link>
           </div>
-          <div style={styles.features}>
+        </nav>
+        <main style={s.main}>
+          <div style={s.hero}>
+            <div style={s.badge}>The operating system for café profitability</div>
+            <h1 style={s.title}>Know what your<br /><em>café is worth</em></h1>
+            <p style={s.subtitle}>Connect your Square POS and accounting software. Get real-time valuations, business health scores, and profitability insights.</p>
+            <Link href="/signup"><button className="btn-primary" style={{ fontSize: '16px', padding: '14px 36px' }}>Start free — no credit card needed →</button></Link>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '12px' }}>Free plan includes 1 café + Square integration</p>
+          </div>
+          <div style={s.features}>
             {[
-              { icon: '📊', title: 'Real-time data', desc: 'Pulls directly from your Square POS — gross sales, net sales, monthly trends.' },
-              { icon: '💰', title: 'Dual valuation', desc: 'Revenue multiple and EBITDA multiple methods, blended into a realistic range.' },
-              { icon: '📈', title: 'Monthly trends', desc: 'See how your sales have grown month-by-month over the past 12 months.' },
-              { icon: '🔒', title: 'Secure & private', desc: 'OAuth connection, no data stored on our servers. Disconnect anytime.' },
+              { icon: '📊', title: 'Real-time valuation', desc: 'Revenue multiple, EBITDA multiple, and asset-based valuations updated live from your actual sales data.' },
+              { icon: '🏥', title: 'Business health score', desc: 'Know instantly how your café is performing — revenue trends, margin analysis, and smart alerts.' },
+              { icon: '🔧', title: 'Equipment ledger', desc: 'Track espresso machines, grinders, fitout and furniture with automatic depreciation calculations.' },
+              { icon: '💼', title: 'Owner adjustments', desc: 'Add back owner salary and personal expenses to calculate true Adjusted EBITDA for accurate valuations.' },
+              { icon: '📍', title: 'Multi-location', desc: 'One Square account, multiple locations? Pick exactly which location feeds each café valuation.' },
+              { icon: '🔗', title: 'More integrations soon', desc: 'Xero, QuickBooks, Lightspeed, Kounta and Tyro integrations coming — all your data in one place.' },
             ].map(f => (
-              <div key={f.title} style={styles.featureCard}>
-                <span style={styles.featureIcon}>{f.icon}</span>
-                <h3 style={styles.featureTitle}>{f.title}</h3>
-                <p style={styles.featureDesc}>{f.desc}</p>
+              <div key={f.title} style={s.featureCard}>
+                <span style={{ fontSize: '28px', display: 'block', marginBottom: '12px' }}>{f.icon}</span>
+                <h3 style={{ fontSize: '17px', marginBottom: '8px' }}>{f.title}</h3>
+                <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>{f.desc}</p>
               </div>
             ))}
           </div>
+          <div style={{ textAlign: 'center', marginBottom: '4rem' }}>
+            <h2 style={{ fontSize: '32px', marginBottom: '8px' }}>Simple pricing</h2>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '2.5rem' }}>One café or twenty — scale as you grow</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+              {[
+                { name: 'Free', price: '$0', cafes: '1 café', features: ['Square POS', 'Basic valuation', 'Equipment ledger'], highlight: false },
+                { name: 'Starter', price: '$49/mo', cafes: 'Up to 3 cafés', features: ['Health score & alerts', 'Owner adjustments', 'Multi-location'], highlight: true },
+                { name: 'Pro', price: '$99/mo', cafes: 'Up to 10 cafés', features: ['Xero & QuickBooks', 'Expense classification', 'External revenue'], highlight: false },
+                { name: 'Elite', price: '$149/mo', cafes: 'Unlimited cafés', features: ['Forecasting', 'Priority support', 'API access'], highlight: false },
+              ].map(plan => (
+                <div key={plan.name} style={{ background: 'white', border: plan.highlight ? '2px solid var(--crema)' : '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem', textAlign: 'left' }}>
+                  <h3 style={{ fontSize: '18px', marginBottom: '4px' }}>{plan.name}</h3>
+                  <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: '24px', marginBottom: '4px' }}>{plan.price}</div>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '1rem' }}>{plan.cafes}</p>
+                  <ul style={{ listStyle: 'none', marginBottom: '1.5rem' }}>
+                    {plan.features.map(f => <li key={f} style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '3px 0', display: 'flex', gap: '6px' }}><span style={{ color: 'var(--success)' }}>✓</span>{f}</li>)}
+                  </ul>
+                  <Link href="/signup"><button className={plan.highlight ? 'btn-primary' : 'btn-secondary'} style={{ width: '100%' }}>Get started</button></Link>
+                </div>
+              ))}
+            </div>
+          </div>
         </main>
+        <footer style={{ textAlign: 'center', padding: '2rem', borderTop: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '13px' }}>
+          © 2026 Caféos · Built for café operators, by café operators
+        </footer>
       </div>
     </>
   )
 }
 
-const styles = {
-  page: { minHeight: '100vh', background: 'linear-gradient(160deg, #faf7f2 0%, #f0e6d3 100%)', position: 'relative' },
-  nav: { padding: '1.5rem 2rem', display: 'flex', alignItems: 'center' },
-  logo: { fontFamily: "'DM Serif Display', serif", fontSize: '20px', color: '#1a0a00' },
-  main: { maxWidth: '860px', margin: '0 auto', padding: '3rem 2rem 4rem' },
-  hero: { textAlign: 'center', marginBottom: '4rem' },
-  badge: { display: 'inline-block', fontSize: '12px', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase', background: '#2d1500', color: '#e8c49a', padding: '5px 14px', borderRadius: '20px', marginBottom: '1.5rem' },
-  title: { fontFamily: "'DM Serif Display', serif", fontSize: 'clamp(40px, 7vw, 72px)', color: '#1a0a00', lineHeight: 1.1, marginBottom: '1.25rem' },
-  subtitle: { fontSize: '18px', color: '#6b4c2a', maxWidth: '520px', margin: '0 auto 2rem', lineHeight: 1.7 },
-  errorBox: { background: '#fde8e6', color: '#c0392b', padding: '12px 20px', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '14px' },
-  connectBtn: { display: 'inline-flex', alignItems: 'center', gap: '10px', background: '#1a0a00', color: '#e8c49a', fontFamily: "'DM Sans', sans-serif", fontSize: '16px', fontWeight: 500, padding: '14px 32px', borderRadius: '50px', cursor: 'pointer', border: 'none', marginBottom: '1rem' },
-  arrow: { fontSize: '18px' },
-  privacy: { fontSize: '13px', color: '#a0826a' },
-  features: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' },
-  featureCard: { background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(26,10,0,0.08)', borderRadius: '16px', padding: '1.5rem', textAlign: 'left' },
-  featureIcon: { fontSize: '24px', display: 'block', marginBottom: '12px' },
-  featureTitle: { fontFamily: "'DM Serif Display', serif", fontSize: '17px', color: '#1a0a00', marginBottom: '8px' },
-  featureDesc: { fontSize: '14px', color: '#6b4c2a', lineHeight: 1.6 },
-                }
+const s = {
+  page: { minHeight: '100vh', background: 'var(--milk)' },
+  nav: { padding: '1.25rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', background: 'rgba(250,247,242,0.95)', backdropFilter: 'blur(8px)', position: 'sticky', top: 0, zIndex: 10 },
+  logo: { fontFamily: "'DM Serif Display', serif", fontSize: '20px', color: 'var(--espresso)' },
+  main: { maxWidth: '1000px', margin: '0 auto', padding: '4rem 2rem' },
+  hero: { textAlign: 'center', marginBottom: '5rem' },
+  badge: { display: 'inline-block', fontSize: '12px', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase', background: 'var(--espresso)', color: 'var(--crema-light)', padding: '5px 16px', borderRadius: '20px', marginBottom: '1.5rem' },
+  title: { fontFamily: "'DM Serif Display', serif", fontSize: 'clamp(44px, 7vw, 72px)', color: 'var(--espresso)', lineHeight: 1.1, marginBottom: '1.25rem' },
+  subtitle: { fontSize: '18px', color: 'var(--text-secondary)', maxWidth: '560px', margin: '0 auto 2rem', lineHeight: 1.7 },
+  features: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '5rem' },
+  featureCard: { background: 'white', border: '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem' },
+                  }
