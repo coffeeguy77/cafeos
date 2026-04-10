@@ -1,6 +1,6 @@
 {
   "name": "cafeos",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -11,6 +11,8 @@
     "next": "14.2.3",
     "react": "^18",
     "react-dom": "^18",
-    "square": "^39.0.0"
+    "@supabase/supabase-js": "^2.39.0",
+    "square": "^39.0.0",
+    "stripe": "^14.0.0"
   }
 }
