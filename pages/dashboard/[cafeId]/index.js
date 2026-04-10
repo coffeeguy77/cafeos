@@ -9,6 +9,7 @@ import { calculateHealthScore, generateAlerts } from '../../../lib/health'
 function fmt(v) { return '$' + Math.round(Math.abs(v || 0)).toLocaleString('en-AU') }
 function pct(v) { return (v || 0).toFixed(1) + '%' }
 const DEF = { cogsPercent: 35, opexPercent: 44, revenueMultiple: 0.5, ebitdaMultiple: 2.5, months: 12 }
+const TODAY = '2026-04-10'
 
 export default function CafeDashboard() {
   const router = useRouter()
@@ -25,13 +26,15 @@ export default function CafeDashboard() {
   const [syncing, setSyncing] = useState(false)
   const [tab, setTab] = useState('overview')
   const [squareConnected, setSquareConnected] = useState(false)
+  const [token, setToken] = useState(null)
 
-  useEffect(() => { if (cafeId) init() }, [cafeId])
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) setToken(session.access_token)
+    })
+  }, [])
 
-  async function getToken() {
-    const { data: { session } } = await supabase.auth.getSession()
-    return session?.access_token
-  }
+  useEffect(() => { if (cafeId && token) init() }, [cafeId, token])
 
   async function init() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -43,31 +46,36 @@ export default function CafeDashboard() {
     setCafe(data)
     const sq = data.integrations?.find(i => i.type === 'square')
     setSquareConnected(sq?.status === 'connected')
-    if (sq?.status === 'connected') await fetchSales()
+    if (sq?.status === 'connected') await fetchSales(12)
     await Promise.all([fetchEquipment(), fetchAdjustments()])
     setLoading(false)
   }
 
   async function fetchSales(months) {
     setSyncing(true)
-    const token = await getToken()
     const m = months || settings.months
     const res = await fetch('/api/square/sales?cafeId=' + cafeId + '&months=' + m, {
       headers: { Authorization: 'Bearer ' + token }
     })
-    if (res.ok) { const d = await res.json(); setSalesData(d.salesData) }
+    if (res.ok) {
+      const d = await res.json()
+      setSalesData(d.salesData)
+      setSetting('months', m)
+    }
     setSyncing(false)
   }
 
   async function fetchEquipment() {
-    const token = await getToken()
-    const res = await fetch('/api/cafes/' + cafeId + '/equipment', { headers: { Authorization: 'Bearer ' + token } })
+    const res = await fetch('/api/cafes/' + cafeId + '/equipment', {
+      headers: { Authorization: 'Bearer ' + token }
+    })
     if (res.ok) { const d = await res.json(); setEquipment(d.equipment || []) }
   }
 
   async function fetchAdjustments() {
-    const token = await getToken()
-    const res = await fetch('/api/cafes/' + cafeId + '/adjustments', { headers: { Authorization: 'Bearer ' + token } })
+    const res = await fetch('/api/cafes/' + cafeId + '/adjustments', {
+      headers: { Authorization: 'Bearer ' + token }
+    })
     if (res.ok) { const d = await res.json(); setAdjustments(d.adjustments || []) }
   }
 
@@ -117,7 +125,7 @@ export default function CafeDashboard() {
               </div>
             )}
             {squareConnected
-              ? <button className="btn-secondary" style={{ fontSize: '13px', padding: '7px 14px' }} onClick={() => fetchSales()}>{syncing ? 'Syncing…' : '↻ Sync'}</button>
+              ? <button className="btn-secondary" style={{ fontSize: '13px', padding: '7px 14px' }} onClick={() => fetchSales(settings.months)} disabled={syncing}>{syncing ? 'Syncing…' : '↻ Sync'}</button>
               : <button className="btn-primary" style={{ fontSize: '13px' }} onClick={connectSquare}>Connect Square</button>
             }
           </div>
@@ -127,10 +135,7 @@ export default function CafeDashboard() {
           {alerts.map((a, i) => (
             <div key={i} style={{ display: 'flex', gap: '12px', padding: '12px 16px', borderRadius: '10px', border: '1px solid', marginBottom: '8px', background: a.severity === 'positive' ? 'var(--success-light)' : a.severity === 'critical' ? 'var(--danger-light)' : 'var(--warning-light)', borderColor: a.severity === 'positive' ? 'var(--success)' : a.severity === 'critical' ? 'var(--danger)' : 'var(--warning)' }}>
               <span>{a.severity === 'positive' ? '📈' : a.severity === 'critical' ? '🚨' : '⚠️'}</span>
-              <div>
-                <strong style={{ fontSize: '14px' }}>{a.title}</strong>
-                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>{a.message}</p>
-              </div>
+              <div><strong style={{ fontSize: '14px' }}>{a.title}</strong><p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>{a.message}</p></div>
             </div>
           ))}
 
@@ -151,13 +156,25 @@ export default function CafeDashboard() {
             </div>
           )}
 
-          {tab === 'overview' && squareConnected && salesData && valuation && (
+          {tab === 'overview' && squareConnected && !salesData && !syncing && (
+            <div style={{ textAlign: 'center', padding: '3rem', background: 'white', borderRadius: '16px', border: '1px solid var(--border)' }}>
+              <p style={{ color: 'var(--text-secondary)' }}>Loading sales data…</p>
+            </div>
+          )}
+
+          {tab === 'overview' && syncing && (
+            <div style={{ textAlign: 'center', padding: '3rem', background: 'white', borderRadius: '16px', border: '1px solid var(--border)' }}>
+              <p style={{ color: 'var(--text-secondary)' }}>Syncing sales data… this may take a moment.</p>
+            </div>
+          )}
+
+          {tab === 'overview' && squareConnected && salesData && valuation && !syncing && (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                 <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Based on {(salesData.orderCount || 0).toLocaleString()} completed orders</p>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   {[3, 6, 12].map(m => (
-                    <button key={m} onClick={() => { setSetting('months', m); fetchSales(m) }} style={{ fontSize: '13px', padding: '5px 14px', borderRadius: '20px', background: settings.months === m ? 'var(--espresso)' : 'transparent', border: '1px solid ' + (settings.months === m ? 'var(--espresso)' : 'var(--border-strong)'), cursor: 'pointer', color: settings.months === m ? 'var(--crema-light)' : 'var(--text-secondary)' }}>
+                    <button key={m} onClick={() => fetchSales(m)} style={{ fontSize: '13px', padding: '5px 14px', borderRadius: '20px', background: settings.months === m ? 'var(--espresso)' : 'transparent', border: '1px solid ' + (settings.months === m ? 'var(--espresso)' : 'var(--border-strong)'), cursor: 'pointer', color: settings.months === m ? 'var(--crema-light)' : 'var(--text-secondary)' }}>
                       {m}m
                     </button>
                   ))}
@@ -183,7 +200,7 @@ export default function CafeDashboard() {
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '1.5rem' }}>
-                {[['Gross sales', fmt(salesData.grossSales), false], ['Net sales', fmt(salesData.netSales), false], ['Avg monthly', fmt(salesData.avgMonthlySales), false], ['Annualised', fmt(salesData.annualisedSales), true]].map(function(item) {
+                {[['Gross sales',fmt(salesData.grossSales),false],['Net sales',fmt(salesData.netSales),false],['Avg monthly',fmt(salesData.avgMonthlySales),false],['Annualised',fmt(salesData.annualisedSales),true]].map(function(item) {
                   return (
                     <div key={item[0]} style={{ background: 'white', border: '1px solid var(--border)', borderRadius: '12px', padding: '1rem' }}>
                       <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>{item[0]}</p>
@@ -271,8 +288,8 @@ export default function CafeDashboard() {
             </>
           )}
 
-          {tab === 'equipment' && <EquipmentTab cafeId={cafeId} equipment={equipment} getToken={getToken} onRefresh={fetchEquipment} />}
-          {tab === 'adjustments' && <AdjustmentsTab cafeId={cafeId} adjustments={adjustments} getToken={getToken} onRefresh={fetchAdjustments} />}
+          {tab === 'equipment' && <EquipmentTab cafeId={cafeId} equipment={equipment} token={token} onRefresh={fetchEquipment} />}
+          {tab === 'adjustments' && <AdjustmentsTab cafeId={cafeId} adjustments={adjustments} token={token} onRefresh={fetchAdjustments} />}
           {tab === 'integrations' && (
             <div>
               <h2 style={{ fontSize: '22px', marginBottom: '1.5rem' }}>Integrations</h2>
@@ -310,11 +327,12 @@ export default function CafeDashboard() {
   )
 }
 
-function EquipmentTab({ cafeId, equipment, getToken, onRefresh }) {
+function EquipmentTab({ cafeId, equipment, token, onRefresh }) {
   const CATS = ['espresso_machine','grinder','brewer','refrigeration','kitchen','pos_hardware','furniture','fitout','vehicle','other']
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ name: '', category: 'espresso_machine', brand: '', purchase_date: '', purchase_price: '', condition: 'good', depreciation_years: 5 })
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   function depVal(item) {
     if (item.current_value) return parseFloat(item.current_value)
@@ -326,16 +344,28 @@ function EquipmentTab({ cafeId, equipment, getToken, onRefresh }) {
   var totalValue = equipment.reduce(function(sum, item) { return sum + depVal(item) }, 0)
 
   async function save(e) {
-    e.preventDefault(); setSaving(true)
-    var token = await getToken()
-    await fetch('/api/cafes/' + cafeId + '/equipment', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(form) })
-    onRefresh(); setShowForm(false); setSaving(false)
+    e.preventDefault()
+    if (!form.name) return
+    setSaving(true); setError('')
+    const res = await fetch('/api/cafes/' + cafeId + '/equipment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify(form)
+    })
+    const data = await res.json()
+    if (data.error) { setError(data.error); setSaving(false); return }
+    onRefresh()
+    setShowForm(false)
+    setSaving(false)
     setForm({ name: '', category: 'espresso_machine', brand: '', purchase_date: '', purchase_price: '', condition: 'good', depreciation_years: 5 })
   }
 
   async function del(id) {
-    var token = await getToken()
-    await fetch('/api/cafes/' + cafeId + '/equipment', { method: 'DELETE', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ id }) })
+    await fetch('/api/cafes/' + cafeId + '/equipment', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ id })
+    })
     onRefresh()
   }
 
@@ -344,13 +374,14 @@ function EquipmentTab({ cafeId, equipment, getToken, onRefresh }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
           <h2 style={{ fontSize: '22px', marginBottom: '4px' }}>Equipment ledger</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Total value: <strong style={{ color: 'var(--sage)' }}>{fmt(totalValue)}</strong></p>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Total depreciated value: <strong style={{ color: 'var(--sage)' }}>{fmt(totalValue)}</strong></p>
         </div>
         <button className="btn-primary" onClick={() => setShowForm(true)}>+ Add item</button>
       </div>
       {showForm && (
         <div style={{ background: 'white', border: '2px solid var(--crema)', borderRadius: '16px', padding: '1.5rem', marginBottom: '1.5rem' }}>
           <h3 style={{ marginBottom: '1.25rem', fontSize: '17px' }}>Add equipment</h3>
+          {error && <div style={{ background: 'var(--danger-light)', color: 'var(--danger)', padding: '8px 12px', borderRadius: '6px', fontSize: '13px', marginBottom: '12px' }}>{error}</div>}
           <form onSubmit={save}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div className="form-group"><label className="form-label">Name *</label><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="La Marzocco Linea PB" required /></div>
@@ -359,24 +390,28 @@ function EquipmentTab({ cafeId, equipment, getToken, onRefresh }) {
                   {CATS.map(c => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
                 </select>
               </div>
-              <div className="form-group"><label className="form-label">Brand</label><input value={form.brand} onChange={e => setForm(f => ({ ...f, brand: e.target.value }))} /></div>
+              <div className="form-group"><label className="form-label">Brand</label><input value={form.brand} onChange={e => setForm(f => ({ ...f, brand: e.target.value }))} placeholder="La Marzocco" /></div>
               <div className="form-group"><label className="form-label">Condition</label>
                 <select value={form.condition} onChange={e => setForm(f => ({ ...f, condition: e.target.value }))}>
                   {['excellent','good','fair','poor'].map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
-              <div className="form-group"><label className="form-label">Purchase date</label><input type="date" value={form.purchase_date} onChange={e => setForm(f => ({ ...f, purchase_date: e.target.value }))} /></div>
-              <div className="form-group"><label className="form-label">Purchase price (AUD)</label><input type="number" value={form.purchase_price} onChange={e => setForm(f => ({ ...f, purchase_price: e.target.value }))} placeholder="15000" /></div>
+              <div className="form-group">
+                <label className="form-label">Purchase date (past only)</label>
+                <input type="date" max={TODAY} value={form.purchase_date} onChange={e => setForm(f => ({ ...f, purchase_date: e.target.value }))} />
+              </div>
+              <div className="form-group"><label className="form-label">Purchase price (AUD)</label><input type="number" min="0" value={form.purchase_price} onChange={e => setForm(f => ({ ...f, purchase_price: e.target.value }))} placeholder="15000" /></div>
+              <div className="form-group"><label className="form-label">Depreciation period (years)</label><input type="number" min="1" max="20" value={form.depreciation_years} onChange={e => setForm(f => ({ ...f, depreciation_years: parseInt(e.target.value) }))} /></div>
             </div>
             <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
               <button className="btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add item'}</button>
-              <button className="btn-secondary" type="button" onClick={() => setShowForm(false)}>Cancel</button>
+              <button className="btn-secondary" type="button" onClick={() => { setShowForm(false); setError('') }}>Cancel</button>
             </div>
           </form>
         </div>
       )}
       {equipment.length === 0
-        ? <div style={{ textAlign: 'center', padding: '3rem', background: 'white', borderRadius: '16px', border: '1px solid var(--border)' }}><div style={{ fontSize: '40px', marginBottom: '12px' }}>🔧</div><p style={{ color: 'var(--text-secondary)' }}>No equipment added yet.</p></div>
+        ? <div style={{ textAlign: 'center', padding: '3rem', background: 'white', borderRadius: '16px', border: '1px solid var(--border)' }}><div style={{ fontSize: '40px', marginBottom: '12px' }}>🔧</div><p style={{ color: 'var(--text-secondary)' }}>No equipment added yet. Add your espresso machine, grinders, fitout and more.</p></div>
         : <div style={{ display: 'grid', gap: '10px' }}>{equipment.map(item => (
           <div key={item.id} style={{ background: 'white', border: '1px solid var(--border)', borderRadius: '12px', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
@@ -384,10 +419,12 @@ function EquipmentTab({ cafeId, equipment, getToken, onRefresh }) {
                 <strong style={{ fontSize: '15px' }}>{item.name}</strong>
                 {item.brand && <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{item.brand}</span>}
                 <span className="badge badge-neutral">{item.category.replace(/_/g, ' ')}</span>
+                <span className={'badge badge-' + (item.condition === 'excellent' ? 'success' : item.condition === 'good' ? 'info' : item.condition === 'fair' ? 'warning' : 'danger')}>{item.condition}</span>
               </div>
               <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                {item.purchase_price && fmt(item.purchase_price)}
-                {item.purchase_date && ' · ' + new Date(item.purchase_date).getFullYear()}
+                {item.purchase_price && ('Purchased ' + fmt(item.purchase_price))}
+                {item.purchase_date && (' · ' + new Date(item.purchase_date).getFullYear())}
+                {item.depreciation_years && (' · ' + item.depreciation_years + 'yr depreciation')}
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -404,7 +441,7 @@ function EquipmentTab({ cafeId, equipment, getToken, onRefresh }) {
   )
 }
 
-function AdjustmentsTab({ cafeId, adjustments, getToken, onRefresh }) {
+function AdjustmentsTab({ cafeId, adjustments, token, onRefresh }) {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ type: 'add_back', label: '', description: '', annual_amount: '' })
   const [saving, setSaving] = useState(false)
@@ -413,15 +450,21 @@ function AdjustmentsTab({ cafeId, adjustments, getToken, onRefresh }) {
 
   async function save(e) {
     e.preventDefault(); setSaving(true)
-    var token = await getToken()
-    await fetch('/api/cafes/' + cafeId + '/adjustments', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(form) })
+    await fetch('/api/cafes/' + cafeId + '/adjustments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify(form)
+    })
     onRefresh(); setShowForm(false); setSaving(false)
     setForm({ type: 'add_back', label: '', description: '', annual_amount: '' })
   }
 
   async function del(id) {
-    var token = await getToken()
-    await fetch('/api/cafes/' + cafeId + '/adjustments', { method: 'DELETE', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ id }) })
+    await fetch('/api/cafes/' + cafeId + '/adjustments', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ id })
+    })
     onRefresh()
   }
 
@@ -455,8 +498,8 @@ function AdjustmentsTab({ cafeId, adjustments, getToken, onRefresh }) {
                 </select>
               </div>
               <div className="form-group"><label className="form-label">Label *</label><input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} placeholder="Owner salary" required /></div>
-              <div className="form-group" style={{ gridColumn: '1/-1' }}><label className="form-label">Description</label><input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="e.g. Personal car lease in expenses" /></div>
-              <div className="form-group"><label className="form-label">Annual amount (AUD) *</label><input type="number" value={form.annual_amount} onChange={e => setForm(f => ({ ...f, annual_amount: e.target.value }))} placeholder="24000" required /></div>
+              <div className="form-group" style={{ gridColumn: '1/-1' }}><label className="form-label">Description</label><input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="e.g. Personal car lease included in expenses" /></div>
+              <div className="form-group"><label className="form-label">Annual amount (AUD) *</label><input type="number" min="0" value={form.annual_amount} onChange={e => setForm(f => ({ ...f, annual_amount: e.target.value }))} placeholder="24000" required /></div>
             </div>
             <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
               <button className="btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add adjustment'}</button>
@@ -498,4 +541,4 @@ const s = {
   valTier: { fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: '8px' },
   valAmt: { fontFamily: 'serif', fontSize: '28px', color: 'var(--espresso)', marginBottom: '4px' },
   valMethod: { fontSize: '12px', color: 'var(--text-muted)' },
-  }
+    }
