@@ -16,16 +16,19 @@ export default async function handler(req,res){
     try{
       const r=await refreshXeroToken(ig.refresh_token)
       accessToken=r.access_token
-      const exp=new Date(Date.now()+r.expires_in*1000).toISOString()
-      await supabaseAdmin.from('integrations').update({access_token:accessToken,refresh_token:r.refresh_token,token_expires_at:exp}).eq('id',ig.id)
+      await supabaseAdmin.from('integrations').update({access_token:accessToken,refresh_token:r.refresh_token,token_expires_at:new Date(Date.now()+r.expires_in*1000).toISOString()}).eq('id',ig.id)
     }catch(e){
       await supabaseAdmin.from('integrations').update({status:'expired'}).eq('id',ig.id)
       return res.status(401).json({error:'Xero token expired — please reconnect'})
     }
   }
   try{
-    const pl=await getXeroProfitAndLoss(accessToken,ig.metadata?.tenant_id,parseInt(months))
-    return res.status(200).json({pl,tenantName:ig.metadata?.tenant_name})
+    // Load saved mapping from DB
+    const{data:mappingRow}=await supabaseAdmin.from('xero_mappings').select('mapping').eq('cafe_id',cafeId).single()
+    const mapping=mappingRow?.mapping||null
+    const hasMapping=mapping&&Object.keys(mapping).some(k=>mapping[k])
+    const pl=await getXeroProfitAndLoss(accessToken,ig.metadata?.tenant_id,parseInt(months),hasMapping?mapping:null)
+    return res.status(200).json({pl,tenantName:ig.metadata?.tenant_name,mappingActive:!!hasMapping})
   }catch(e){
     console.error('Xero P&L error:',e)
     return res.status(500).json({error:e.message})
