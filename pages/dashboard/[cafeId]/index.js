@@ -5,12 +5,19 @@ import Link from 'next/link'
 import{supabase}from '../../../lib/supabase'
 import{calculateValuation}from '../../../lib/square'
 import{calculateHealthScore,generateAlerts}from '../../../lib/health'
-const TODAY='2026-04-18',SK='sb-edoucarmulyjeqiydjxd-auth-token'
+const TODAY='2026-04-27',SK='sb-edoucarmulyjeqiydjxd-auth-token'
 const DEF={cogsPercent:35,opexPercent:44,revenueMultiple:0.5,ebitdaMultiple:2.5,months:12}
 const fmt=v=>'$'+Math.round(Math.abs(v||0)).toLocaleString('en-AU')
 const pct=v=>(v||0).toFixed(1)+'%'
 const getToken=()=>{try{return JSON.parse(localStorage.getItem(SK)||'{}').access_token||null}catch(e){return null}}
 function itemValue(i){const m=i.valuation_mode||'depreciated';if(i.ownership==='roastery'||i.ownership==='leased')return 0;if(m==='secondhand')return parseFloat(i.secondhand_value||0);if(m==='replacement'){const cp=i.condition==='excellent'?0.85:i.condition==='good'?0.65:i.condition==='fair'?0.4:0.2;return parseFloat(i.replacement_cost||0)*cp}if(m==='manual')return parseFloat(i.manual_value||0);if(!i.purchase_price||!i.purchase_date)return 0;const y=(new Date()-new Date(i.purchase_date))/(365.25*24*3600*1000);return parseFloat(i.purchase_price)*Math.max(0,1-y/(i.depreciation_years||5))}
+function resolveAdj(adj,xeroLines){
+  const xAmt=xeroLines?.find(l=>l.name===adj.xero_line)?.amount||0
+  const base=adj.source==='xero'?xAmt:parseFloat(adj.annual_amount||0)
+  if(adj.method==='percentage') return base*(parseFloat(adj.percentage||0)/100)
+  if(adj.method==='full') return base
+  return parseFloat(adj.annual_amount||0)
+}
 const EF={name:'',category:'espresso_machine',brand:'',purchase_date:'',purchase_price:'',condition:'good',depreciation_years:5,valuation_mode:'depreciated',secondhand_value:'',replacement_cost:'',manual_value:'',ownership:'cafe',notes:''}
 const CATS=['espresso_machine','grinder','brewer','refrigeration','kitchen','pos_hardware','furniture','fitout','vehicle','other']
 const SI={fontSize:'12px',padding:'4px 7px',borderRadius:'6px',border:'1px solid var(--border)',background:'white',width:'100%'}
@@ -31,7 +38,7 @@ function ItemForm({initial,onSave,onCancel,onDelete,saving,err,isEdit}){
     <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'6px',marginBottom:'10px'}}>
       <div><label style={LB}>Brand</label><input style={II} value={f.brand||''} onChange={e=>set('brand',e.target.value)} placeholder="Anfim"/></div>
       <div><label style={LB}>Condition</label><select style={SI} value={f.condition} onChange={e=>set('condition',e.target.value)}>{['excellent','good','fair','poor'].map(c=><option key={c} value={c}>{c}</option>)}</select></div>
-      <div><label style={LB}>Purchased</label><input type="date" style={II} max="2026-04-18" value={f.purchase_date||''} onChange={e=>set('purchase_date',e.target.value)}/></div>
+      <div><label style={LB}>Purchased</label><input type="date" style={II} max="2026-04-27" value={f.purchase_date||''} onChange={e=>set('purchase_date',e.target.value)}/></div>
       <div><label style={LB}>Price paid $</label><input type="number" min="0" style={II} value={f.purchase_price||''} onChange={e=>set('purchase_price',e.target.value)} placeholder="3800"/></div>
       <div><label style={LB}>Depr. yrs</label><select style={SI} value={f.depreciation_years||5} onChange={e=>set('depreciation_years',parseInt(e.target.value))}>{[3,5,7,10,15,20].map(y=><option key={y} value={y}>{y}yr</option>)}</select></div>
     </div>
@@ -66,42 +73,173 @@ function EquipmentTab({cafeId,equipment,onRefresh}){
     {equipment.length>0&&<div style={{display:'grid',gap:'5px'}}>{equipment.map(item=><div key={item.id}>{editId===item.id?<ItemForm initial={item} onSave={saveEdit} onCancel={()=>{setEditId(null);setErr('')}} onDelete={()=>del(item.id)} saving={saving} err={err} isEdit={true}/>:<div style={{background:'white',border:'1px solid var(--border)',borderRadius:'9px',padding:'0.65rem 0.875rem',display:'flex',justifyContent:'space-between',alignItems:'center',opacity:item.ownership==='roastery'||item.ownership==='leased'?0.7:1}}><div style={{flex:1,minWidth:0}}><div style={{display:'flex',alignItems:'center',gap:'5px',marginBottom:'1px',flexWrap:'wrap'}}><strong style={{fontSize:'13px'}}>{item.name}</strong>{item.brand&&<span style={{fontSize:'11px',color:'var(--text-muted)'}}>{item.brand}</span>}{OB(item)}{MB(item)}</div><div style={{fontSize:'11px',color:'var(--text-muted)'}}>{item.purchase_price&&fmt(item.purchase_price)+' new'}{item.purchase_date&&' · '+new Date(item.purchase_date).getFullYear()}{item.notes&&' · '+item.notes.substring(0,45)+(item.notes.length>45?'…':'')}</div></div><div style={{display:'flex',alignItems:'center',gap:'6px',marginLeft:'8px',flexShrink:0}}>{item.ownership==='roastery'||item.ownership==='leased'?<span style={{fontSize:'11px',color:'var(--text-muted)',fontStyle:'italic'}}>not included</span>:<div style={{textAlign:'right'}}><div style={{fontSize:'14px',fontWeight:600,fontFamily:'serif'}}>{fmt(itemValue(item))}</div><div style={{fontSize:'10px',color:'var(--text-muted)'}}>sale value</div></div>}<button title="Duplicate" onClick={()=>dup(item)} style={{background:'none',border:'1px solid var(--border)',borderRadius:'5px',padding:'2px 6px',cursor:'pointer',fontSize:'12px',color:'var(--text-muted)',lineHeight:1}}>⧉</button><button title="Edit" onClick={()=>{setEditId(item.id);setShowAdd(false);setErr('')}} style={{background:'none',border:'1px solid var(--border)',borderRadius:'5px',padding:'2px 6px',cursor:'pointer',fontSize:'12px',color:'var(--text-secondary)',lineHeight:1}}>✎</button></div></div>}</div>)}</div>}
   </div>)
 }
-function AdjustmentsTab({cafeId,adjustments,onRefresh}){
-  const[showForm,setShowForm]=useState(false),[form,setForm]=useState({type:'add_back',label:'',description:'',annual_amount:''}),[saving,setSaving]=useState(false)
-  const ab=adjustments.filter(a=>a.type==='add_back').reduce((s,a)=>s+Number(a.annual_amount),0),rm=adjustments.filter(a=>a.type==='remove').reduce((s,a)=>s+Number(a.annual_amount),0)
-  async function save(e){e.preventDefault();setSaving(true);await fetch('/api/cafes/'+cafeId+'/adjustments',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify(form)});await onRefresh();setShowForm(false);setSaving(false);setForm({type:'add_back',label:'',description:'',annual_amount:''})}
+function AdjustmentsTab({cafeId,adjustments,onRefresh,xeroLines,xeroConn}){
+  const EF={label:'',description:'',source:'manual',method:'fixed',xero_line:'',percentage:'',annual_amount:'',result_type:'add_back'}
+  const[showForm,setShowForm]=useState(false),[form,setForm]=useState(EF),[saving,setSaving]=useState(false),[err,setErr]=useState('')
+  const sf=(k,v)=>setForm(f=>({...f,[k]:v}))
+
+  // Compute resolved annual amount for display
+  function resolve(adj,xLine){
+    if(adj.source==='xero'&&xLine){
+      if(adj.method==='percentage') return xLine*(parseFloat(adj.percentage||0)/100)
+      if(adj.method==='fixed') return parseFloat(adj.annual_amount||0)
+      return xLine // full
+    }
+    if(adj.method==='percentage'&&adj.source==='manual') return parseFloat(adj.annual_amount||0)*(parseFloat(adj.percentage||0)/100)
+    return parseFloat(adj.annual_amount||0)
+  }
+
+  // Get live xero amount for a line name
+  const xeroAmt=(name)=>xeroLines?.find(l=>l.name===name)?.amount||0
+
+  // Summary totals
+  const addBacks=adjustments.filter(a=>a.result_type==='add_back').reduce((s,a)=>s+resolve(a,xeroAmt(a.xero_line)),0)
+  const removals=adjustments.filter(a=>a.result_type==='remove').reduce((s,a)=>s+resolve(a,xeroAmt(a.xero_line)),0)
+  const replaces=adjustments.filter(a=>a.result_type==='replace')
+
+  async function save(e){
+    e.preventDefault();setSaving(true);setErr('')
+    const body={...form}
+    if(body.source==='xero'){body.annual_amount=xeroAmt(body.xero_line)||0}
+    const res=await fetch('/api/cafes/'+cafeId+'/adjustments',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify(body)})
+    const d=await res.json()
+    if(!res.ok){setErr(d.error||'Save failed');setSaving(false);return}
+    await onRefresh();setShowForm(false);setSaving(false);setForm(EF)
+  }
   async function del(id){await fetch('/api/cafes/'+cafeId+'/adjustments',{method:'DELETE',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({id})});onRefresh()}
+
+  const RT_LABELS={add_back:'Add-back',remove:'Remove',replace:'Replace'}
+  const RT_COLORS={add_back:'var(--success)',remove:'var(--danger)',replace:'#7c5cbf'}
+  const RT_BG={add_back:'var(--success-light)',remove:'var(--danger-light)',replace:'#f3efff'}
+  const M_LABELS={fixed:'Fixed amount',percentage:'% of source',full:'Full source value'}
+  const S_LABELS={manual:'Manual entry',xero:'From Xero P&L'}
+
   return(<div>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}><div><h2 style={{fontSize:'19px',marginBottom:'2px'}}>Owner adjustments</h2><p style={{color:'var(--text-secondary)',fontSize:'13px'}}>Normalise EBITDA for true earnings</p></div><button onClick={()=>setShowForm(true)} style={{fontSize:'12px',padding:'5px 12px',borderRadius:'7px',background:'var(--espresso)',color:'var(--crema-light)',border:'none',cursor:'pointer'}}>+ Add</button></div>
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'1rem'}}><div style={{background:'var(--success-light)',borderRadius:'9px',padding:'0.65rem 0.875rem'}}><p style={{fontSize:'10px',color:'var(--success)',fontWeight:600,marginBottom:'2px',textTransform:'uppercase'}}>Add-backs</p><p style={{fontSize:'18px',fontFamily:'serif',color:'var(--success)'}}>+{fmt(ab)}</p></div><div style={{background:'var(--danger-light)',borderRadius:'9px',padding:'0.65rem 0.875rem'}}><p style={{fontSize:'10px',color:'var(--danger)',fontWeight:600,marginBottom:'2px',textTransform:'uppercase'}}>Removals</p><p style={{fontSize:'18px',fontFamily:'serif',color:'var(--danger)'}}>-{fmt(rm)}</p></div></div>
-    {showForm&&<div style={{background:'white',border:'1px solid var(--crema)',borderRadius:'10px',padding:'1rem',marginBottom:'8px'}}><form onSubmit={save}><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'8px'}}><div><label style={LB}>Type</label><select style={SI} value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value}))}><option value="add_back">Add-back (increases EBITDA)</option><option value="remove">Remove (decreases EBITDA)</option></select></div><div><label style={LB}>Label *</label><input style={II} value={form.label} onChange={e=>setForm(f=>({...f,label:e.target.value}))} placeholder="Owner salary" required/></div><div style={{gridColumn:'1/-1'}}><label style={LB}>Description</label><input style={II} value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))} placeholder="e.g. Personal car lease in expenses"/></div><div><label style={LB}>Annual amount AUD *</label><input type="number" min="0" style={II} value={form.annual_amount} onChange={e=>setForm(f=>({...f,annual_amount:e.target.value}))} placeholder="24000" required/></div></div><div style={{display:'flex',gap:'6px'}}><button type="submit" disabled={saving} style={{fontSize:'12px',padding:'5px 14px',borderRadius:'7px',background:'var(--espresso)',color:'var(--crema-light)',border:'none',cursor:'pointer'}}>{saving?'Saving…':'Save'}</button><button type="button" onClick={()=>setShowForm(false)} style={{fontSize:'12px',padding:'5px 10px',borderRadius:'7px',background:'transparent',color:'var(--text-secondary)',border:'1px solid var(--border)',cursor:'pointer'}}>Cancel</button></div></form></div>}
-    {adjustments.length===0?<div style={{textAlign:'center',padding:'2.5rem',background:'white',borderRadius:'12px',border:'1px solid var(--border)'}}><div style={{fontSize:'32px',marginBottom:'8px'}}>💼</div><p style={{color:'var(--text-secondary)',fontSize:'13px'}}>No adjustments yet.</p></div>:<div style={{display:'grid',gap:'5px'}}>{adjustments.map(a=><div key={a.id} style={{background:'white',border:'1px solid var(--border)',borderRadius:'9px',padding:'0.65rem 0.875rem',display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><div style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'1px'}}><strong style={{fontSize:'13px'}}>{a.label}</strong><span style={{fontSize:'10px',padding:'1px 6px',borderRadius:'10px',background:a.type==='add_back'?'var(--success-light)':'var(--danger-light)',color:a.type==='add_back'?'var(--success)':'var(--danger)',fontWeight:500}}>{a.type==='add_back'?'Add-back':'Remove'}</span></div>{a.description&&<p style={{fontSize:'11px',color:'var(--text-muted)'}}>{a.description}</p>}</div><div style={{display:'flex',alignItems:'center',gap:'8px'}}><span style={{fontSize:'13px',fontWeight:600,fontFamily:'serif',color:a.type==='add_back'?'var(--success)':'var(--danger)'}}>{a.type==='add_back'?'+':'-'}{fmt(Number(a.annual_amount))}/yr</span><button onClick={()=>del(a.id)} style={{background:'none',border:'none',color:'var(--danger)',cursor:'pointer',fontSize:'15px',padding:'0 2px'}}>✕</button></div></div>)}</div>}
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
+      <div><h2 style={{fontSize:'19px',marginBottom:'2px'}}>Owner adjustments</h2><p style={{fontSize:'12px',color:'var(--text-muted)'}}>Override, add-back, or remove expense lines. Choose source, calculation method and how it affects the valuation.</p></div>
+      <button onClick={()=>{setShowForm(true);setErr('')}} style={{fontSize:'12px',padding:'5px 12px',borderRadius:'7px',background:'var(--espresso)',color:'var(--crema-light)',border:'none',cursor:'pointer'}}>+ Add adjustment</button>
+    </div>
+
+    {/* Summary row */}
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'8px',marginBottom:'1rem'}}>
+      <div style={{background:'var(--success-light)',borderRadius:'9px',padding:'0.65rem 0.875rem'}}><p style={{fontSize:'10px',color:'var(--success)',fontWeight:600,marginBottom:'2px',textTransform:'uppercase'}}>Add-backs</p><p style={{fontSize:'18px',fontFamily:'serif',color:'var(--success)'}}>+{fmt(addBacks)}</p><p style={{fontSize:'10px',color:'var(--success)',marginTop:'1px'}}>Increases EBITDA</p></div>
+      <div style={{background:'var(--danger-light)',borderRadius:'9px',padding:'0.65rem 0.875rem'}}><p style={{fontSize:'10px',color:'var(--danger)',fontWeight:600,marginBottom:'2px',textTransform:'uppercase'}}>Removals</p><p style={{fontSize:'18px',fontFamily:'serif',color:'var(--danger)'}}>-{fmt(removals)}</p><p style={{fontSize:'10px',color:'var(--danger)',marginTop:'1px'}}>Decreases EBITDA</p></div>
+      <div style={{background:'#f3efff',borderRadius:'9px',padding:'0.65rem 0.875rem'}}><p style={{fontSize:'10px',color:'#7c5cbf',fontWeight:600,marginBottom:'2px',textTransform:'uppercase'}}>Replacements</p><p style={{fontSize:'18px',fontFamily:'serif',color:'#7c5cbf'}}>{replaces.length} line{replaces.length!==1?'s':''}</p><p style={{fontSize:'10px',color:'#7c5cbf',marginTop:'1px'}}>Overrides Xero figures</p></div>
+    </div>
+
+    {/* Add form */}
+    {showForm&&<div style={{background:'white',border:'1px solid var(--crema)',borderRadius:'12px',padding:'1.25rem',marginBottom:'1rem'}}>
+      {err&&<div style={{background:'var(--danger-light)',color:'var(--danger)',padding:'5px 8px',borderRadius:'6px',marginBottom:'8px',fontSize:'12px'}}>{err}</div>}
+      <form onSubmit={save}>
+        {/* Row 1: label + result type */}
+        <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:'8px',marginBottom:'10px'}}>
+          <div><label style={LB}>Label *</label><input style={II} value={form.label} onChange={e=>sf('label',e.target.value)} placeholder="e.g. Café share of rent" required/></div>
+          <div><label style={LB}>Effect on valuation</label>
+            <div style={{display:'flex',gap:'4px',flexWrap:'wrap',marginTop:'2px'}}>
+              {Object.entries(RT_LABELS).map(([k,v])=><button key={k} type="button" onClick={()=>sf('result_type',k)} style={{fontSize:'11px',padding:'3px 9px',borderRadius:'20px',border:'1px solid '+(form.result_type===k?RT_COLORS[k]:'var(--border)'),background:form.result_type===k?RT_BG[k]:'white',color:form.result_type===k?RT_COLORS[k]:'var(--text-muted)',cursor:'pointer',fontWeight:form.result_type===k?600:400}}>{v}</button>)}
+            </div>
+            <p style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'3px'}}>{form.result_type==='add_back'?'Adds back to EBITDA (non-café cost)':form.result_type==='remove'?'Subtracts from EBITDA (missed cost)':'Replaces Xero figure with calculated amount'}</p>
+          </div>
+        </div>
+
+        {/* Row 2: source + xero line picker */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'10px'}}>
+          <div><label style={LB}>Source</label>
+            <div style={{display:'flex',gap:'4px',marginTop:'2px'}}>
+              <button type="button" onClick={()=>sf('source','manual')} style={{fontSize:'11px',padding:'3px 10px',borderRadius:'20px',border:'1px solid '+(form.source==='manual'?'var(--espresso)':'var(--border)'),background:form.source==='manual'?'var(--crema-pale)':'white',color:form.source==='manual'?'var(--espresso)':'var(--text-muted)',cursor:'pointer',fontWeight:form.source==='manual'?600:400}}>Manual entry</button>
+              {xeroConn&&<button type="button" onClick={()=>sf('source','xero')} style={{fontSize:'11px',padding:'3px 10px',borderRadius:'20px',border:'1px solid '+(form.source==='xero'?'#0077b5':'var(--border)'),background:form.source==='xero'?'#e8f4fd':'white',color:form.source==='xero'?'#0077b5':'var(--text-muted)',cursor:'pointer',fontWeight:form.source==='xero'?600:400}}>From Xero</button>}
+            </div>
+          </div>
+          {form.source==='xero'&&xeroLines?.length>0&&<div><label style={LB}>Xero P&L line</label>
+            <select style={SI} value={form.xero_line} onChange={e=>sf('xero_line',e.target.value)} required={form.source==='xero'}>
+              <option value="">Select line...</option>
+              {xeroLines.map(l=><option key={l.name} value={l.name}>{l.name} ({fmt(l.amount)})</option>)}
+            </select>
+            {form.xero_line&&<p style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'2px'}}>Xero value: {fmt(xeroAmt(form.xero_line))}/yr</p>}
+          </div>}
+          {form.source==='manual'&&<div><label style={LB}>Base annual amount $</label><input type="number" min="0" style={II} value={form.annual_amount} onChange={e=>sf('annual_amount',e.target.value)} placeholder="e.g. 190000" required={form.source==='manual'}/></div>}
+        </div>
+
+        {/* Row 3: method */}
+        <div style={{marginBottom:'10px'}}>
+          <label style={LB}>Calculation method</label>
+          <div style={{display:'flex',gap:'4px',flexWrap:'wrap',marginTop:'2px'}}>
+            {Object.entries(M_LABELS).map(([k,v])=><button key={k} type="button" onClick={()=>sf('method',k)} style={{fontSize:'11px',padding:'3px 10px',borderRadius:'20px',border:'1px solid '+(form.method===k?'var(--espresso)':'var(--border)'),background:form.method===k?'var(--crema-pale)':'white',color:form.method===k?'var(--espresso)':'var(--text-muted)',cursor:'pointer',fontWeight:form.method===k?600:400}}>{v}</button>)}
+          </div>
+        </div>
+
+        {/* Row 4: percentage input if needed + preview */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'12px'}}>
+          {form.method==='percentage'&&<div><label style={LB}>Percentage %</label><div style={{display:'flex',alignItems:'center',gap:'6px'}}><input type="number" min="0" max="100" step="0.1" style={{...II,width:'80px'}} value={form.percentage} onChange={e=>sf('percentage',e.target.value)} placeholder="30" required/><input type="range" min="0" max="100" step="1" value={form.percentage||0} onChange={e=>sf('percentage',e.target.value)} style={{flex:1}}/></div></div>}
+          {/* Live preview */}
+          {(form.label&&(form.source==='manual'?form.annual_amount:form.xero_line))&&<div style={{background:'var(--crema-pale)',borderRadius:'8px',padding:'10px 12px',display:'flex',flexDirection:'column',justifyContent:'center'}}>
+            <p style={{fontSize:'10px',color:'var(--text-muted)',marginBottom:'2px'}}>Preview — café adjustment</p>
+            <p style={{fontSize:'18px',fontFamily:'serif',color:RT_COLORS[form.result_type],fontWeight:600}}>
+              {form.result_type==='add_back'?'+':form.result_type==='remove'?'-':'±'}{fmt(resolve(form,xeroAmt(form.xero_line)))}/yr
+            </p>
+            <p style={{fontSize:'10px',color:'var(--text-muted)'}}>{form.method==='percentage'&&form.percentage?form.percentage+'% of ':''}
+              {form.source==='xero'&&form.xero_line?form.xero_line:form.source==='manual'?'manual entry':''} 
+              → {RT_LABELS[form.result_type]?.toLowerCase()}
+            </p>
+          </div>}
+        </div>
+
+        {/* Description */}
+        <div style={{marginBottom:'12px'}}><label style={LB}>Notes (optional)</label><input style={II} value={form.description} onChange={e=>sf('description',e.target.value)} placeholder="e.g. 30% of shared rent — café occupies ground floor only"/></div>
+
+        <div style={{display:'flex',gap:'6px'}}>
+          <button type="submit" disabled={saving||!form.label} style={{fontSize:'12px',padding:'5px 14px',borderRadius:'7px',background:'var(--espresso)',color:'var(--crema-light)',border:'none',cursor:'pointer',opacity:saving||!form.label?0.6:1}}>{saving?'Saving…':'Save adjustment'}</button>
+          <button type="button" onClick={()=>{setShowForm(false);setErr('');setForm(EF)}} style={{fontSize:'12px',padding:'5px 10px',borderRadius:'7px',background:'transparent',color:'var(--text-secondary)',border:'1px solid var(--border)',cursor:'pointer'}}>Cancel</button>
+        </div>
+      </form>
+    </div>}
+
+    {/* List */}
+    {adjustments.length===0&&!showForm&&<div style={{textAlign:'center',padding:'2.5rem',background:'white',borderRadius:'12px',border:'1px solid var(--border)'}}><div style={{fontSize:'32px',marginBottom:'8px'}}>💼</div><p style={{color:'var(--text-secondary)',fontSize:'13px',marginBottom:'4px'}}>No adjustments yet.</p><p style={{color:'var(--text-muted)',fontSize:'12px'}}>Common examples: café share of rent, owner salary add-back, market manager wage.</p></div>}
+    {adjustments.length>0&&<div style={{display:'grid',gap:'6px'}}>{adjustments.map(a=>{
+      const base=a.source==='xero'?xeroAmt(a.xero_line):parseFloat(a.annual_amount||0)
+      const resolved=resolve(a,xeroAmt(a.xero_line))
+      const rt=a.result_type||'add_back'
+      return(<div key={a.id} style={{background:'white',border:'1px solid var(--border)',borderRadius:'10px',padding:'0.75rem 1rem',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+        <div style={{flex:1}}>
+          <div style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'3px',flexWrap:'wrap'}}>
+            <strong style={{fontSize:'13px'}}>{a.label}</strong>
+            <span style={{fontSize:'10px',padding:'1px 6px',borderRadius:'10px',background:RT_BG[rt],color:RT_COLORS[rt],fontWeight:600}}>{RT_LABELS[rt]}</span>
+            {a.source==='xero'&&<span style={{fontSize:'10px',padding:'1px 6px',borderRadius:'10px',background:'#e8f4fd',color:'#0077b5'}}>Xero: {a.xero_line}</span>}
+          </div>
+          <div style={{fontSize:'11px',color:'var(--text-muted)',display:'flex',gap:'8px',flexWrap:'wrap'}}>
+            <span>{S_LABELS[a.source||'manual']}</span>
+            {a.method==='percentage'&&<span>· {a.percentage}% of {fmt(base)}</span>}
+            {a.method==='fixed'&&<span>· Fixed {fmt(resolved)}/yr</span>}
+            {a.method==='full'&&a.source==='xero'&&<span>· Full Xero value</span>}
+            {a.description&&<span>· {a.description}</span>}
+          </div>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:'10px',marginLeft:'12px',flexShrink:0}}>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontSize:'15px',fontWeight:600,fontFamily:'serif',color:RT_COLORS[rt]}}>{rt==='add_back'?'+':'-'}{fmt(resolved)}/yr</div>
+            {a.method==='percentage'&&<div style={{fontSize:'10px',color:'var(--text-muted)'}}>{a.percentage}% of {fmt(base)}</div>}
+          </div>
+          <button onClick={()=>del(a.id)} style={{background:'none',border:'none',color:'var(--danger)',cursor:'pointer',fontSize:'15px',padding:'0 2px',opacity:0.6}}>✕</button>
+        </div>
+      </div>)
+    })}</div>}
   </div>)
 }
 function XeroMappingTab({cafeId,onMappingSaved}){
   const[raw,setRaw]=useState(null),[mapping,setMapping]=useState({}),[saving,setSaving]=useState(false),[loading,setLoading]=useState(true),[saved,setSaved]=useState(false),[months,setMonths]=useState(12)
   useEffect(()=>{load(12)},[cafeId])
-  async function load(m){
-    setLoading(true)
-    const res=await fetch('/api/xero/raw?cafeId='+cafeId+'&months='+m,{headers:{Authorization:'Bearer '+getToken()}})
-    if(res.ok){const d=await res.json();setRaw(d.raw);if(d.mapping&&Object.keys(d.mapping).length>0)setMapping(d.mapping)}
-    setLoading(false)
-  }
+  async function load(m){setLoading(true);const res=await fetch('/api/xero/raw?cafeId='+cafeId+'&months='+m,{headers:{Authorization:'Bearer '+getToken()}});if(res.ok){const d=await res.json();setRaw(d.raw);if(d.mapping&&Object.keys(d.mapping).length>0)setMapping(d.mapping)};setLoading(false)}
   function toggle(name){setMapping(m=>({...m,[name]:!m[name]}))}
   function setAll(sec,val){const u={};sec.rows.forEach(r=>{u[r.name]=val});setMapping(m=>({...m,...u}))}
-  async function save(){
-    setSaving(true)
-    await fetch('/api/xero/mapping',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({cafeId,mapping})})
-    setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),2500)
-    if(onMappingSaved) onMappingSaved(mapping)
-  }
+  async function save(){setSaving(true);await fetch('/api/xero/mapping',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({cafeId,mapping})});setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),2500);if(onMappingSaved)onMappingSaved(mapping)}
   const incTotal=raw?.sections?.reduce((st,sec)=>st+sec.rows.reduce((sr,r)=>sr+(mapping[r.name]?r.amount:0),0),0)||0
   const allTotal=raw?.sections?.reduce((st,sec)=>st+sec.rows.reduce((sr,r)=>sr+r.amount,0),0)||0
   if(loading) return <div style={{textAlign:'center',padding:'3rem',color:'var(--text-muted)',fontSize:'13px'}}>Loading Xero P&L…</div>
   if(!raw) return <div style={{textAlign:'center',padding:'3rem',color:'var(--danger)',fontSize:'13px'}}>Could not load Xero data.</div>
   return(<div>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'1rem'}}>
-      <div><h2 style={{fontSize:'19px',marginBottom:'3px'}}>Xero P&L mapping</h2><p style={{fontSize:'12px',color:'var(--text-muted)'}}>Tick only lines that belong to this café. Mixed lines — exclude here, add a manual Adjustment for the café portion.</p></div>
+      <div><h2 style={{fontSize:'19px',marginBottom:'3px'}}>Xero P&L mapping</h2><p style={{fontSize:'12px',color:'var(--text-muted)'}}>Tick only lines that belong to this café. Mixed lines — exclude here, add an adjustment for the café portion.</p></div>
       <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
         <div style={{display:'flex',gap:'2px'}}>{[3,6,12].map(m=><button key={m} onClick={()=>{setMonths(m);load(m)}} style={{fontSize:'11px',padding:'3px 8px',borderRadius:'20px',cursor:'pointer',background:months===m?'var(--espresso)':'transparent',border:'1px solid '+(months===m?'var(--espresso)':'var(--border)'),color:months===m?'var(--crema-light)':'var(--text-secondary)'}}>{m}m</button>)}</div>
         <button onClick={save} disabled={saving} style={{fontSize:'12px',padding:'5px 14px',borderRadius:'7px',background:saved?'var(--success)':'var(--espresso)',color:'var(--crema-light)',border:'none',cursor:'pointer'}}>{saving?'Saving…':saved?'✓ Saved':'Save mapping'}</button>
@@ -119,26 +257,9 @@ function XeroMappingTab({cafeId,onMappingSaved}){
       return(<div key={sec.title} style={{background:'white',border:'1px solid var(--border)',borderRadius:'10px',marginBottom:'8px',overflow:'hidden'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 12px',background:'var(--crema-pale)',borderBottom:'1px solid var(--border)'}}>
           <div style={{display:'flex',alignItems:'center',gap:'8px'}}><strong style={{fontSize:'12px',color:'var(--espresso)'}}>{sec.title}</strong><span style={{fontSize:'10px',color:'var(--text-muted)'}}>{sec.rows.length} lines</span></div>
-          <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
-            <span style={{fontSize:'11px',color:'var(--text-muted)'}}>{fmt(secInc)} of {fmt(secTotal)}</span>
-            <div style={{display:'flex',gap:'4px'}}>
-              <button onClick={()=>setAll(sec,true)} style={{fontSize:'10px',padding:'2px 7px',borderRadius:'5px',border:'1px solid var(--border)',background:allOn?'var(--espresso)':'white',color:allOn?'var(--crema-light)':'var(--text-muted)',cursor:'pointer'}}>All</button>
-              <button onClick={()=>setAll(sec,false)} style={{fontSize:'10px',padding:'2px 7px',borderRadius:'5px',border:'1px solid var(--border)',background:allOff?'var(--danger)':'white',color:allOff?'white':'var(--text-muted)',cursor:'pointer'}}>None</button>
-            </div>
-          </div>
+          <div style={{display:'flex',alignItems:'center',gap:'10px'}}><span style={{fontSize:'11px',color:'var(--text-muted)'}}>{fmt(secInc)} of {fmt(secTotal)}</span><div style={{display:'flex',gap:'4px'}}><button onClick={()=>setAll(sec,true)} style={{fontSize:'10px',padding:'2px 7px',borderRadius:'5px',border:'1px solid var(--border)',background:allOn?'var(--espresso)':'white',color:allOn?'var(--crema-light)':'var(--text-muted)',cursor:'pointer'}}>All</button><button onClick={()=>setAll(sec,false)} style={{fontSize:'10px',padding:'2px 7px',borderRadius:'5px',border:'1px solid var(--border)',background:allOff?'var(--danger)':'white',color:allOff?'white':'var(--text-muted)',cursor:'pointer'}}>None</button></div></div>
         </div>
-        <div>{sec.rows.map((row,i)=>{
-          const on=!!mapping[row.name],pctOfSec=secTotal>0?Math.round(row.amount/secTotal*100):0
-          return(<div key={row.name} onClick={()=>toggle(row.name)} style={{display:'flex',alignItems:'center',gap:'10px',padding:'7px 12px',borderBottom:i<sec.rows.length-1?'1px solid var(--border)':'none',cursor:'pointer',background:on?'#f0faf4':'white'}}>
-            <div style={{width:'16px',height:'16px',borderRadius:'4px',border:'2px solid '+(on?'var(--success)':'var(--border)'),background:on?'var(--success)':'white',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>{on&&<span style={{color:'white',fontSize:'10px',fontWeight:700}}>✓</span>}</div>
-            <span style={{flex:1,fontSize:'12px',color:on?'var(--espresso)':'var(--text-secondary)',fontWeight:on?500:400}}>{row.name}</span>
-            <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-              <div style={{width:'60px',height:'3px',background:'var(--crema-pale)',borderRadius:'2px'}}><div style={{height:'100%',width:pctOfSec+'%',background:on?'var(--success)':'var(--border)',borderRadius:'2px'}}/></div>
-              <span style={{fontSize:'12px',fontFamily:'serif',color:on?'var(--espresso)':'var(--text-muted)',width:'80px',textAlign:'right'}}>{fmt(row.amount)}</span>
-              <span style={{fontSize:'10px',color:'var(--text-muted)',width:'28px',textAlign:'right'}}>{pctOfSec}%</span>
-            </div>
-          </div>)
-        })}</div>
+        <div>{sec.rows.map((row,i)=>{const on=!!mapping[row.name],pctOfSec=secTotal>0?Math.round(row.amount/secTotal*100):0;return(<div key={row.name} onClick={()=>toggle(row.name)} style={{display:'flex',alignItems:'center',gap:'10px',padding:'7px 12px',borderBottom:i<sec.rows.length-1?'1px solid var(--border)':'none',cursor:'pointer',background:on?'#f0faf4':'white'}}><div style={{width:'16px',height:'16px',borderRadius:'4px',border:'2px solid '+(on?'var(--success)':'var(--border)'),background:on?'var(--success)':'white',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>{on&&<span style={{color:'white',fontSize:'10px',fontWeight:700}}>✓</span>}</div><span style={{flex:1,fontSize:'12px',color:on?'var(--espresso)':'var(--text-secondary)',fontWeight:on?500:400}}>{row.name}</span><div style={{display:'flex',alignItems:'center',gap:'8px'}}><div style={{width:'60px',height:'3px',background:'var(--crema-pale)',borderRadius:'2px'}}><div style={{height:'100%',width:pctOfSec+'%',background:on?'var(--success)':'var(--border)',borderRadius:'2px'}}/></div><span style={{fontSize:'12px',fontFamily:'serif',color:on?'var(--espresso)':'var(--text-muted)',width:'80px',textAlign:'right'}}>{fmt(row.amount)}</span><span style={{fontSize:'10px',color:'var(--text-muted)',width:'28px',textAlign:'right'}}>{pctOfSec}%</span></div></div>)})}</div>
       </div>)
     })}
   </div>)
@@ -152,7 +273,7 @@ export default function CafeDashboard(){
   const[settings,setSettings]=useState(DEF),[val,setVal]=useState(null),[hs,setHs]=useState(null),[alerts,setAlerts]=useState([])
   const[loading,setLoading]=useState(true),[syncing,setSyncing]=useState(false),[tab,setTab]=useState('overview'),[sqConn,setSqConn]=useState(false)
   const[xeroConn,setXeroConn]=useState(false),[xeroName,setXeroName]=useState(null),[xeroPL,setXeroPL]=useState(null),[xeroLoading,setXeroLoading]=useState(false)
-  const[lastSyncInfo,setLastSyncInfo]=useState(null)
+  const[xeroLines,setXeroLines]=useState([]),[lastSyncInfo,setLastSyncInfo]=useState(null)
   const[steps,setSteps]=useState([{label:'Connecting',detail:'Verifying your account',status:'pending'},{label:'Square sales',detail:'Loading order history',status:'pending'},{label:'Xero P&L',detail:'Fetching expense data',status:'pending'},{label:'Calculating valuation',detail:'Running the model',status:'pending'}])
   const setStep=(i,status,detail)=>setSteps(prev=>prev.map((s,idx)=>idx===i?{...s,status,detail:detail||s.detail}:s))
   useEffect(()=>{if(cafeId)init()},[cafeId])
@@ -167,7 +288,7 @@ export default function CafeDashboard(){
     const sq=data.integrations?.find(i=>i.type==='square'),xr=data.integrations?.find(i=>i.type==='xero')
     const sqC=sq?.status==='connected',xrC=xr?.status==='connected'
     setSqConn(sqC);setXeroConn(xrC)
-    if(xrC) setXeroName(xr.metadata?.tenant_name||'Xero')
+    if(xrC)setXeroName(xr.metadata?.tenant_name||'Xero')
     setStep(0,'done')
     await Promise.all([loadEq(),loadAdj()])
     if(sqC){setStep(1,'active','Checking cache…');await loadSales(12,false);setStep(1,'done')}
@@ -178,14 +299,8 @@ export default function CafeDashboard(){
   }
   async function loadSales(months,force){
     setSyncing(true)
-    const url='/api/square/sales?cafeId='+cafeId+'&months='+months+(force?'&forceSync=true':'')
-    const res=await fetch(url,{headers:{Authorization:'Bearer '+getToken()}})
-    if(res.ok){
-      const d=await res.json()
-      setSd(d.salesData)
-      setLastSyncInfo({newRows:d.newRowsFetched,from:d.lastSyncedFrom})
-      setStep(1,'active','Synced '+(d.salesData?.orderCount||0).toLocaleString()+' orders'+(d.newRowsFetched>0?' (+'+d.newRowsFetched+' new days)':''))
-    }
+    const res=await fetch('/api/square/sales?cafeId='+cafeId+'&months='+months+(force?'&forceSync=true':''),{headers:{Authorization:'Bearer '+getToken()}})
+    if(res.ok){const d=await res.json();setSd(d.salesData);setLastSyncInfo({newRows:d.newRowsFetched,from:d.lastSyncedFrom})}
     setSyncing(false)
   }
   async function switchPeriod(months){
@@ -199,13 +314,16 @@ export default function CafeDashboard(){
   async function loadXero(months){
     setXeroLoading(true)
     const res=await fetch('/api/xero/reports?cafeId='+cafeId+'&months='+(months||settings.months),{headers:{Authorization:'Bearer '+getToken()}})
-    if(res.ok){const d=await res.json();setXeroPL(d.pl);if(d.tenantName)setXeroName(d.tenantName)}
+    if(res.ok){
+      const d=await res.json();setXeroPL(d.pl)
+      if(d.tenantName)setXeroName(d.tenantName)
+      // Extract flat line list for adjustments dropdown
+      const rawRes=await fetch('/api/xero/raw?cafeId='+cafeId+'&months='+(months||settings.months),{headers:{Authorization:'Bearer '+getToken()}})
+      if(rawRes.ok){const rd=await rawRes.json();const lines=rd.raw?.sections?.flatMap(s=>s.rows)||[];setXeroLines(lines)}
+    }
     setXeroLoading(false)
   }
-  function handleMappingSaved(){
-    // Reload Xero P&L from server — mapping is now applied server-side
-    loadXero(settings.months)
-  }
+  function handleMappingSaved(){loadXero(settings.months)}
   useEffect(()=>{
     if(!sd)return
     setStep(3,'active')
@@ -213,17 +331,16 @@ export default function CafeDashboard(){
     let cogsAmt=revenue*(settings.cogsPercent/100),opexAmt=revenue*(settings.opexPercent/100)
     if(xeroPL&&xeroPL.revenue>0){cogsAmt=xeroPL.cogs*(12/xeroPL.months);opexAmt=xeroPL.totalExpenses*(12/xeroPL.months)}
     const expenses=[{normalised_type:'cogs',amount:cogsAmt,is_excluded:false},{normalised_type:'opex',amount:opexAmt,is_excluded:false}]
-    const v=calculateValuation(sd,expenses,eq,adj,settings)
+    const v=calculateValuation(sd,expenses,eq,adj.map(a=>({...a,annual_amount:resolveAdj(a,xeroLines)})),settings)
     setVal(v);setHs(calculateHealthScore(sd,v,[]));setAlerts(generateAlerts(sd,v));setStep(3,'done')
-  },[sd,eq,adj,settings,xeroPL])
+  },[sd,eq,adj,settings,xeroPL,xeroLines])
   const ss=(k,v)=>setSettings(p=>({...p,[k]:v}))
   async function cp(m){ss('months',m);await switchPeriod(m)}
-  async function forceSync(){await loadSales(settings.months,true)}
   async function connSq(){const r=await fetch('/api/square/auth?cafeId='+cafeId);const{url}=await r.json();window.location.href=url}
   async function connXero(){const r=await fetch('/api/xero/auth?cafeId='+cafeId,{headers:{Authorization:'Bearer '+getToken()}});const{url}=await r.json();window.location.href=url}
   const hc=!hs?'#999':hs.total>=70?'var(--success)':hs.total>=40?'var(--warning)':'var(--danger)'
   const mappingActive=xeroPL&&xeroPL.totalExpenses>0
-  if(loading) return <LoadingScreen steps={steps}/>
+  if(loading)return <LoadingScreen steps={steps}/>
   return(<>
     <Head><title>{cafe?.name} — Caféos</title></Head>
     <div style={{minHeight:'100vh',background:'var(--milk)'}}>
@@ -231,7 +348,7 @@ export default function CafeDashboard(){
         <div style={{display:'flex',alignItems:'center',gap:'14px'}}><Link href="/dashboard" style={{color:'var(--text-muted)',fontSize:'13px',textDecoration:'none'}}>← All cafés</Link><span style={s.logo}>☕ {cafe?.name}</span></div>
         <div style={{display:'flex',alignItems:'center',gap:'7px'}}>
           {hs&&<div style={{display:'flex',alignItems:'center',gap:'4px',padding:'3px 10px',background:'white',borderRadius:'20px',border:'1px solid var(--border)'}}><span style={{fontSize:'11px',color:'var(--text-secondary)'}}>Health</span><span style={{fontSize:'11px',fontWeight:600,color:hc}}>{hs.total}/100 {hs.grade}</span></div>}
-          {sqConn?<button style={s.btnSm} onClick={forceSync} disabled={syncing} title={lastSyncInfo?'Last fetched: '+lastSyncInfo.newRows+' new days':undefined}>{syncing?'Syncing…':'↻ Sync'}</button>:<button style={{...s.btnSm,background:'var(--espresso)',color:'var(--crema-light)',border:'none'}} onClick={connSq}>Connect Square</button>}
+          {sqConn?<button style={s.btnSm} onClick={()=>loadSales(settings.months,true)} disabled={syncing}>{syncing?'Syncing…':'↻ Sync'}</button>:<button style={{...s.btnSm,background:'var(--espresso)',color:'var(--crema-light)',border:'none'}} onClick={connSq}>Connect Square</button>}
         </div>
       </nav>
       <main style={{maxWidth:'920px',margin:'0 auto',padding:'1.25rem 1.5rem 4rem'}}>
@@ -239,10 +356,7 @@ export default function CafeDashboard(){
         <div style={{display:'flex',gap:'3px',marginBottom:'1.125rem',background:'white',borderRadius:'9px',padding:'3px',border:'1px solid var(--border)'}}>{['overview','equipment','adjustments',xeroConn?'xero mapping':null,'integrations'].filter(Boolean).map(t=><button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:'6px 4px',borderRadius:'6px',border:'none',fontSize:'11px',cursor:'pointer',background:tab===t?'var(--espresso)':'transparent',color:tab===t?'var(--crema-light)':'var(--text-secondary)',fontWeight:tab===t?500:400,position:'relative'}}>{t==='xero mapping'?<>Xero mapping{mappingActive&&<span style={{position:'absolute',top:'3px',right:'3px',width:'5px',height:'5px',borderRadius:'50%',background:'var(--success)'}}/>}</>:t.charAt(0).toUpperCase()+t.slice(1)}</button>)}</div>
         {tab==='overview'&&!sqConn&&<div style={{textAlign:'center',padding:'3rem 2rem',background:'white',borderRadius:'14px',border:'1px solid var(--border)'}}><div style={{fontSize:'36px',marginBottom:'0.75rem'}}>🔗</div><h2 style={{marginBottom:'6px',fontSize:'19px'}}>Connect Square POS</h2><p style={{color:'var(--text-secondary)',marginBottom:'1rem',fontSize:'13px'}}>Pull real sales data for an accurate valuation.</p><button style={{fontSize:'12px',padding:'6px 18px',borderRadius:'7px',background:'var(--espresso)',color:'var(--crema-light)',border:'none',cursor:'pointer'}} onClick={connSq}>Connect with Square</button></div>}
         {tab==='overview'&&sqConn&&<>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.875rem'}}>
-            <p style={{fontSize:'12px',color:'var(--text-muted)'}}>{syncing?'Syncing…':sd?(sd.orderCount||0).toLocaleString()+' orders':'Loading…'}</p>
-            <div style={{display:'flex',gap:'3px'}}>{[3,6,12].map(m=><button key={m} onClick={()=>cp(m)} disabled={syncing} style={{fontSize:'11px',padding:'3px 9px',borderRadius:'20px',cursor:'pointer',background:settings.months===m?'var(--espresso)':'transparent',border:'1px solid '+(settings.months===m?'var(--espresso)':'var(--border-strong)'),color:settings.months===m?'var(--crema-light)':'var(--text-secondary)'}}>{m}m</button>)}</div>
-          </div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.875rem'}}><p style={{fontSize:'12px',color:'var(--text-muted)'}}>{syncing?'Syncing…':sd?(sd.orderCount||0).toLocaleString()+' orders':'Loading…'}</p><div style={{display:'flex',gap:'3px'}}>{[3,6,12].map(m=><button key={m} onClick={()=>cp(m)} disabled={syncing} style={{fontSize:'11px',padding:'3px 9px',borderRadius:'20px',cursor:'pointer',background:settings.months===m?'var(--espresso)':'transparent',border:'1px solid '+(settings.months===m?'var(--espresso)':'var(--border-strong)'),color:settings.months===m?'var(--crema-light)':'var(--text-secondary)'}}>{m}m</button>)}</div></div>
           {val&&sd&&<>
             <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'7px',marginBottom:'0.875rem'}}>
               <div style={s.vc}><p style={s.vt}>Conservative</p><p style={s.va}>{fmt(val.valByRevenue)}</p><p style={s.vm}>Revenue x {settings.revenueMultiple.toFixed(2)}</p></div>
@@ -251,7 +365,7 @@ export default function CafeDashboard(){
             </div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'6px',marginBottom:'0.875rem'}}>{[['Gross',fmt(sd.grossSales)],['Net',fmt(sd.netSales)],['Avg/mo',fmt(sd.avgMonthlySales)],['Annualised',fmt(sd.annualisedSales)]].map(it=><div key={it[0]} style={{background:'white',border:'1px solid var(--border)',borderRadius:'9px',padding:'0.6rem 0.8rem'}}><p style={{fontSize:'10px',color:'var(--text-muted)',marginBottom:'1px'}}>{it[0]}</p><p style={{fontSize:'16px',fontFamily:'serif',color:'var(--espresso)'}}>{it[1]}</p></div>)}</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'8px'}}>
-              <div style={s.card}><h3 style={s.ct}>Profit and loss {xeroPL&&xeroPL.revenue>0&&<span style={{fontSize:'10px',fontWeight:400,color:'var(--success)'}}>via Xero ✓ {mappingActive?'(mapped)':''}</span>}</h3>{[['Revenue',fmt(val.revenue),false,false],['COGS','−'+fmt(val.cogs),true,false],['Gross profit',fmt(val.grossProfit)+' ('+pct(val.grossMargin)+')',false,true],['Operating','−'+fmt(val.totalExpenses-val.cogs),true,false],['EBITDA',fmt(val.ebitda)+' ('+pct(val.ebitdaMargin)+')',false,true],['Add-backs','+ '+fmt(val.addBacks),false,false],['Adj. EBITDA',fmt(val.adjustedEbitda),false,true]].map((r,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',padding:'3px 0',borderBottom:'1px solid var(--border)',fontWeight:r[3]?600:400}}><span style={{fontSize:'11px',color:'var(--text-secondary)'}}>{r[0]}</span><span style={{fontSize:'11px',color:r[2]?'var(--danger)':'inherit'}}>{r[1]}</span></div>)}{val.equipmentValue>0&&<div style={{display:'flex',justifyContent:'space-between',padding:'3px 0',fontWeight:600}}><span style={{fontSize:'11px',color:'var(--text-secondary)'}}>Equipment (owned)</span><span style={{fontSize:'11px',color:'var(--sage)'}}>+ {fmt(val.equipmentValue)}</span></div>}{xeroConn&&(!xeroPL||xeroPL.revenue===0)&&<div style={{marginTop:'8px',padding:'5px 8px',background:'var(--warning-light)',borderRadius:'6px',fontSize:'10px',color:'var(--warning)'}}>Map your Xero lines in the Xero mapping tab to filter non-café expenses.</div>}</div>
+              <div style={s.card}><h3 style={s.ct}>Profit and loss {xeroPL&&xeroPL.revenue>0&&<span style={{fontSize:'10px',fontWeight:400,color:'var(--success)'}}>via Xero ✓</span>}</h3>{[['Revenue',fmt(val.revenue),false,false],['COGS','−'+fmt(val.cogs),true,false],['Gross profit',fmt(val.grossProfit)+' ('+pct(val.grossMargin)+')',false,true],['Operating','−'+fmt(val.totalExpenses-val.cogs),true,false],['EBITDA',fmt(val.ebitda)+' ('+pct(val.ebitdaMargin)+')',false,true],['Add-backs','+ '+fmt(val.addBacks),false,false],['Adj. EBITDA',fmt(val.adjustedEbitda),false,true]].map((r,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',padding:'3px 0',borderBottom:'1px solid var(--border)',fontWeight:r[3]?600:400}}><span style={{fontSize:'11px',color:'var(--text-secondary)'}}>{r[0]}</span><span style={{fontSize:'11px',color:r[2]?'var(--danger)':'inherit'}}>{r[1]}</span></div>)}{val.equipmentValue>0&&<div style={{display:'flex',justifyContent:'space-between',padding:'3px 0',fontWeight:600}}><span style={{fontSize:'11px',color:'var(--text-secondary)'}}>Equipment (owned)</span><span style={{fontSize:'11px',color:'var(--sage)'}}>+ {fmt(val.equipmentValue)}</span></div>}</div>
               {hs&&<div style={s.card}><h3 style={s.ct}>Business health</h3><div style={{textAlign:'center',padding:'0.4rem 0 0.875rem'}}><div style={{fontSize:'42px',fontFamily:'serif',color:hc,lineHeight:1}}>{hs.total}</div><div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'1px'}}>out of 100</div><div style={{display:'inline-block',marginTop:'4px',padding:'2px 9px',borderRadius:'20px',background:hc+'20',color:hc,fontWeight:500,fontSize:'11px'}}>{hs.label}</div></div>{hs.breakdown?.map((it,i)=>{const bc=it.score/it.max>=0.7?'var(--success)':it.score/it.max>=0.4?'var(--warning)':'var(--danger)';return <div key={i} style={{marginBottom:'6px'}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:'1px'}}><span style={{fontSize:'10px',color:'var(--text-secondary)'}}>{it.label}</span><span style={{fontSize:'10px',fontWeight:500}}>{it.score}/{it.max}</span></div><div style={{height:'3px',background:'var(--crema-pale)',borderRadius:'2px'}}><div style={{height:'100%',width:(it.score/it.max*100)+'%',background:bc,borderRadius:'2px'}}/></div></div>})}</div>}
             </div>
             {!xeroPL&&<div style={s.card}><h3 style={s.ct}>Adjust assumptions</h3><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'0.875rem'}}>{[['COGS %','Food, packaging',10,70,1,settings.cogsPercent,settings.cogsPercent+'%','cogsPercent'],['Operating %','Rent, wages',10,80,1,settings.opexPercent,settings.opexPercent+'%','opexPercent'],['Revenue x','0.3x–0.8x',0.1,2,0.05,settings.revenueMultiple,settings.revenueMultiple.toFixed(2)+'x','revenueMultiple'],['EBITDA x','2x–4x',0.5,8,0.25,settings.ebitdaMultiple,settings.ebitdaMultiple.toFixed(2)+'x','ebitdaMultiple']].map(r=><div key={r[7]}><div style={{display:'flex',justifyContent:'space-between',marginBottom:'2px'}}><span style={{fontSize:'11px',color:'var(--text-secondary)'}}>{r[0]}</span><strong style={{fontSize:'11px',fontFamily:'serif'}}>{r[6]}</strong></div><input type="range" min={r[2]} max={r[3]} step={r[4]} value={r[5]} onChange={e=>ss(r[7],parseFloat(e.target.value))} style={{width:'100%'}}/><p style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'1px'}}>{r[1]}</p></div>)}</div></div>}
@@ -259,7 +373,7 @@ export default function CafeDashboard(){
           </>}
         </>}
         {tab==='equipment'&&<EquipmentTab cafeId={cafeId} equipment={eq} onRefresh={loadEq}/>}
-        {tab==='adjustments'&&<AdjustmentsTab cafeId={cafeId} adjustments={adj} onRefresh={loadAdj}/>}
+        {tab==='adjustments'&&<AdjustmentsTab cafeId={cafeId} adjustments={adj} onRefresh={loadAdj} xeroLines={xeroLines} xeroConn={xeroConn}/>}
         {tab==='xero mapping'&&<XeroMappingTab cafeId={cafeId} onMappingSaved={handleMappingSaved}/>}
         {tab==='integrations'&&<div><h2 style={{fontSize:'18px',marginBottom:'0.875rem'}}>Integrations</h2>{[{id:'square',name:'Square',desc:'POS sales & orders',icon:'■',av:true,conn:sqConn,onConnect:connSq},{id:'xero',name:'Xero',desc:'Accounting & P&L',icon:'X',av:true,conn:xeroConn,onConnect:connXero,sub:xeroConn&&xeroName?'Connected to '+xeroName:null},{id:'qb',name:'QuickBooks',desc:'Accounting',icon:'◆',av:false},{id:'ls',name:'Lightspeed',desc:'POS',icon:'⚡',av:false}].map(it=><div key={it.id} style={{background:'white',border:'1px solid '+(it.conn?'var(--success)':'var(--border)'),borderRadius:'9px',padding:'0.875rem',display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}><div style={{display:'flex',alignItems:'center',gap:'10px'}}><div style={{width:'34px',height:'34px',borderRadius:'8px',background:it.conn?'var(--success-light)':'var(--crema-pale)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',fontWeight:700,color:it.conn?'var(--success)':'var(--text-muted)'}}>{it.icon}</div><div><div style={{display:'flex',alignItems:'center',gap:'6px'}}><strong style={{fontSize:'13px'}}>{it.name}</strong>{it.conn&&<span style={{fontSize:'9px',padding:'1px 5px',borderRadius:'8px',background:'var(--success-light)',color:'var(--success)',fontWeight:600}}>Connected</span>}{!it.av&&!it.conn&&<span style={{fontSize:'9px',padding:'1px 5px',borderRadius:'8px',background:'var(--crema-pale)',color:'var(--text-muted)'}}>Coming soon</span>}</div><p style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'1px'}}>{it.sub||it.desc}</p></div></div><div style={{display:'flex',gap:'6px',alignItems:'center'}}>{it.conn&&it.id==='xero'&&<button onClick={()=>loadXero(settings.months)} disabled={xeroLoading} style={{fontSize:'11px',padding:'4px 10px',borderRadius:'6px',background:'transparent',border:'1px solid var(--border)',cursor:'pointer',color:'var(--text-secondary)'}}>{xeroLoading?'Loading…':'↻ Refresh P&L'}</button>}{it.av&&!it.conn&&<button onClick={it.onConnect} style={{fontSize:'11px',padding:'4px 10px',borderRadius:'6px',background:'var(--espresso)',color:'var(--crema-light)',border:'none',cursor:'pointer'}}>Connect</button>}{it.conn&&<span style={{fontSize:'11px',color:'var(--success)'}}>✓ Active</span>}</div></div>)}</div>}
       </main>
