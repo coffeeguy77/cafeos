@@ -5,7 +5,7 @@ import Link from 'next/link'
 import{supabase}from '../../../lib/supabase'
 import{calculateValuation}from '../../../lib/square'
 import{calculateHealthScore,generateAlerts}from '../../../lib/health'
-const TODAY='2026-04-27',SK='sb-edoucarmulyjeqiydjxd-auth-token'
+const TODAY='2026-04-28',SK='sb-edoucarmulyjeqiydjxd-auth-token'
 const DEF={cogsPercent:35,opexPercent:44,revenueMultiple:0.5,ebitdaMultiple:2.5,months:12}
 const fmt=v=>'$'+Math.round(Math.abs(v||0)).toLocaleString('en-AU')
 const pct=v=>(v||0).toFixed(1)+'%'
@@ -29,7 +29,7 @@ function ItemForm({initial,onSave,onCancel,onDelete,saving,err,isEdit}){
     <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'6px',marginBottom:'10px'}}>
       <div><label style={LB}>Brand</label><input style={II} value={f.brand||''} onChange={e=>set('brand',e.target.value)}/></div>
       <div><label style={LB}>Condition</label><select style={SI} value={f.condition} onChange={e=>set('condition',e.target.value)}>{['excellent','good','fair','poor'].map(c=><option key={c} value={c}>{c}</option>)}</select></div>
-      <div><label style={LB}>Purchased</label><input type="date" style={II} max="2026-04-27" value={f.purchase_date||''} onChange={e=>set('purchase_date',e.target.value)}/></div>
+      <div><label style={LB}>Purchased</label><input type="date" style={II} max="2026-04-28" value={f.purchase_date||''} onChange={e=>set('purchase_date',e.target.value)}/></div>
       <div><label style={LB}>Price paid $</label><input type="number" min="0" style={II} value={f.purchase_price||''} onChange={e=>set('purchase_price',e.target.value)}/></div>
       <div><label style={LB}>Depr. yrs</label><select style={SI} value={f.depreciation_years||5} onChange={e=>set('depreciation_years',parseInt(e.target.value))}>{[3,5,7,10,15,20].map(y=><option key={y} value={y}>{y}yr</option>)}</select></div>
     </div>
@@ -85,12 +85,12 @@ function EquipmentTab({cafeId,equipment,onRefresh}){
   const OB=item=>{if(item.ownership==='roastery')return <span style={{fontSize:'10px',padding:'1px 6px',borderRadius:'10px',background:'#fff3cd',color:'#856404',fontWeight:500}}>Roastery</span>;if(item.ownership==='leased')return <span style={{fontSize:'10px',padding:'1px 6px',borderRadius:'10px',background:'var(--crema-pale)',color:'var(--text-muted)',fontWeight:500}}>Leased</span>;return null}
   return(<div>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'0.875rem'}}>
-      <div><h2 style={{fontSize:'19px',marginBottom:'2px'}}>Equipment ledger</h2><div style={{display:'flex',gap:'12px',flexWrap:'wrap'}}><span style={{fontSize:'12px',color:'var(--sage)',fontWeight:600}}>{fmt(total)} sale value</span>{suspended.length>0&&<span style={{fontSize:'12px',color:'#d97706',fontWeight:500}}>{suspended.length} suspended</span>}<span style={{fontSize:'12px',color:'var(--text-muted)'}}>{owned.length} active items</span></div></div>
+      <div><h2 style={{fontSize:'19px',marginBottom:'2px'}}>Equipment ledger</h2><div style={{display:'flex',gap:'12px',flexWrap:'wrap'}}><span style={{fontSize:'12px',color:'var(--sage)',fontWeight:600}}>{fmt(total)} sale value</span>{suspended.length>0&&<span style={{fontSize:'12px',color:'#d97706',fontWeight:500}}>{suspended.length} suspended</span>}<span style={{fontSize:'12px',color:'var(--text-muted)'}}>{owned.length} active</span></div></div>
       <div style={{display:'flex',gap:'6px'}}><button onClick={()=>setShowImport(!showImport)} style={{fontSize:'11px',padding:'4px 10px',borderRadius:'7px',background:'white',color:'var(--text-secondary)',border:'1px solid var(--border)',cursor:'pointer'}}>⬆ Import CSV</button><button onClick={()=>{setShowAdd(true);setEditId(null);setErr('')}} style={{fontSize:'12px',padding:'5px 12px',borderRadius:'7px',background:'var(--espresso)',color:'var(--crema-light)',border:'none',cursor:'pointer'}}>+ Add item</button></div>
     </div>
     {showImport&&<div style={{background:'white',border:'1px solid var(--border)',borderRadius:'12px',padding:'1rem',marginBottom:'1rem'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}><h3 style={{fontSize:'13px',fontWeight:600,color:'var(--espresso)'}}>Bulk import from CSV</h3><button onClick={downloadSampleCSV} style={{fontSize:'11px',padding:'3px 9px',borderRadius:'6px',background:'transparent',border:'1px solid var(--border)',cursor:'pointer',color:'var(--text-muted)'}}>⬇ Download template</button></div>
-      <p style={{fontSize:'11px',color:'var(--text-muted)',marginBottom:'10px'}}>Download the template, fill it in, then upload here. Category values: espresso_machine, grinder, brewer, refrigeration, kitchen, pos_hardware, furniture, fitout, vehicle, other.</p>
+      <p style={{fontSize:'11px',color:'var(--text-muted)',marginBottom:'10px'}}>Download the template, fill it in, then upload. Category values: espresso_machine, grinder, brewer, refrigeration, kitchen, pos_hardware, furniture, fitout, vehicle, other.</p>
       <div style={{border:'2px dashed var(--border)',borderRadius:'8px',padding:'1.5rem',textAlign:'center',marginBottom:'10px'}}><input type="file" accept=".csv" onChange={onFileChange} style={{display:'none'}} id="csv-upload"/><label htmlFor="csv-upload" style={{cursor:'pointer',fontSize:'12px',color:'var(--espresso)',fontWeight:500}}>📂 Choose CSV file</label>{csvPreview&&<p style={{fontSize:'11px',color:'var(--success)',marginTop:'5px'}}>{csvPreview.length} rows ready to import</p>}</div>
       {importErr&&<div style={{background:'var(--danger-light)',color:'var(--danger)',padding:'5px 8px',borderRadius:'6px',fontSize:'12px',marginBottom:'8px'}}>{importErr}</div>}
       {csvPreview?.length>0&&<div style={{marginBottom:'10px',maxHeight:'150px',overflowY:'auto',border:'1px solid var(--border)',borderRadius:'6px'}}><table style={{width:'100%',fontSize:'10px',borderCollapse:'collapse'}}><thead><tr style={{background:'var(--crema-pale)'}}>{Object.keys(csvPreview[0]).map(h=><th key={h} style={{padding:'3px 6px',textAlign:'left',color:'var(--text-muted)',fontWeight:600,borderBottom:'1px solid var(--border)'}}>{h}</th>)}</tr></thead><tbody>{csvPreview.slice(0,5).map((row,i)=><tr key={i} style={{borderBottom:'1px solid var(--border)'}}>{Object.values(row).map((v,j)=><td key={j} style={{padding:'3px 6px',color:'var(--text-secondary)'}}>{String(v).substring(0,20)}</td>)}</tr>)}</tbody></table>{csvPreview.length>5&&<p style={{fontSize:'10px',color:'var(--text-muted)',padding:'3px 6px'}}>...and {csvPreview.length-5} more</p>}</div>}
@@ -99,12 +99,107 @@ function EquipmentTab({cafeId,equipment,onRefresh}){
     {showAdd&&<ItemForm initial={null} onSave={saveNew} onCancel={()=>{setShowAdd(false);setErr('')}} saving={saving} err={err} isEdit={false}/>}
     <div style={{display:'grid',gridTemplateColumns:'1fr auto auto auto',gap:'6px',marginBottom:'10px',alignItems:'center',position:'relative'}}>
       <div style={{position:'relative'}}><input style={{...II,paddingLeft:'28px'}} placeholder="Search equipment…" value={search} onChange={e=>onSearch(e.target.value)} onBlur={()=>setTimeout(()=>setShowSugg(false),150)}/><span style={{position:'absolute',left:'8px',top:'50%',transform:'translateY(-50%)',fontSize:'12px',color:'var(--text-muted)'}}>&#128269;</span>{showSugg&&<div style={{position:'absolute',top:'100%',left:0,right:0,background:'white',border:'1px solid var(--border)',borderRadius:'6px',zIndex:10,boxShadow:'0 4px 12px rgba(0,0,0,0.1)'}}>{suggestions.map(s=><div key={s} onMouseDown={()=>{setSearch(s);setShowSugg(false)}} style={{padding:'6px 10px',fontSize:'12px',cursor:'pointer',color:'var(--espresso)'}}>{s}</div>)}</div>}</div>
-      <select style={SI} value={filterCat} onChange={e=>setFilterCat(e.target.value)}><option value="all">All categories</option>{['espresso_machine','grinder','brewer','refrigeration','kitchen','pos_hardware','furniture','fitout','vehicle','other'].map(c=><option key={c} value={c}>{c.replace(/_/g,' ')}</option>)}</select>
+      <select style={SI} value={filterCat} onChange={e=>setFilterCat(e.target.value)}><option value="all">All categories</option>{CATS.map(c=><option key={c} value={c}>{c.replace(/_/g,' ')}</option>)}</select>
       <select style={SI} value={filterOwn} onChange={e=>setFilterOwn(e.target.value)}><option value="all">All ownership</option><option value="cafe">Cafe owned</option><option value="roastery">Roastery</option><option value="leased">Leased</option></select>
       <select style={SI} value={sortBy} onChange={e=>setSortBy(e.target.value)}><option value="value_desc">Value ↓</option><option value="value_asc">Value ↑</option><option value="name_asc">Name A–Z</option><option value="name_desc">Name Z–A</option><option value="date_desc">Newest</option><option value="cat">Category</option></select>
     </div>
     {display.length===0&&!showAdd&&<div style={{textAlign:'center',padding:'2.5rem',background:'white',borderRadius:'12px',border:'1px solid var(--border)'}}><div style={{fontSize:'32px',marginBottom:'8px'}}>🔧</div><p style={{color:'var(--text-secondary)',fontSize:'13px'}}>No equipment found.</p></div>}
     <div style={{display:'grid',gap:'5px'}}>{display.map(item=><div key={item.id}>{editId===item.id?<ItemForm initial={item} onSave={saveEdit} onCancel={()=>{setEditId(null);setErr('')}} onDelete={()=>del(item.id)} saving={saving} err={err} isEdit={true}/>:<div style={{background:item.suspended?'#fffbeb':'white',border:'1px solid '+(item.suspended?'#f59e0b':'var(--border)'),borderRadius:'9px',padding:'0.65rem 0.875rem',display:'flex',justifyContent:'space-between',alignItems:'center'}}><div style={{flex:1,minWidth:0}}><div style={{display:'flex',alignItems:'center',gap:'5px',marginBottom:'1px',flexWrap:'wrap'}}><strong style={{fontSize:'13px',color:item.suspended?'#92400e':'inherit'}}>{item.name}</strong>{item.brand&&<span style={{fontSize:'11px',color:'var(--text-muted)'}}>{item.brand}</span>}{OB(item)}{item.suspended&&<span style={{fontSize:'10px',padding:'1px 7px',borderRadius:'10px',background:'#fef3c7',color:'#92400e',fontWeight:600}}>⏸ Suspended from sale</span>}<span style={{fontSize:'10px',padding:'1px 6px',borderRadius:'10px',background:'var(--crema-pale)',color:'var(--text-muted)'}}>{(item.category||'').replace(/_/g,' ')}</span></div><div style={{fontSize:'11px',color:'var(--text-muted)'}}>{item.purchase_price&&fmt(item.purchase_price)+' new'}{item.purchase_date&&' · '+new Date(item.purchase_date).getFullYear()}{item.notes&&' · '+item.notes.substring(0,40)+(item.notes.length>40?'…':'')}</div></div><div style={{display:'flex',alignItems:'center',gap:'6px',marginLeft:'8px',flexShrink:0}}>{item.suspended?<div style={{textAlign:'right'}}><div style={{fontSize:'12px',color:'#92400e',fontStyle:'italic'}}>suspended</div><div style={{fontSize:'10px',color:'#b45309'}}>{fmt(itemValue(item))} excl.</div></div>:item.ownership==='roastery'||item.ownership==='leased'?<span style={{fontSize:'11px',color:'var(--text-muted)',fontStyle:'italic'}}>not included</span>:<div style={{textAlign:'right'}}><div style={{fontSize:'14px',fontWeight:600,fontFamily:'serif'}}>{fmt(item._val)}</div><div style={{fontSize:'10px',color:'var(--text-muted)'}}>sale value</div></div>}<button title={item.suspended?'Re-include':'Suspend from sale'} onClick={()=>toggleSuspend(item)} style={{background:'none',border:'1px solid '+(item.suspended?'#f59e0b':'var(--border)'),borderRadius:'5px',padding:'2px 6px',cursor:'pointer',fontSize:'11px',color:item.suspended?'#92400e':'var(--text-muted)',lineHeight:1}}>{item.suspended?'▶':'⏸'}</button><button title="Duplicate" onClick={()=>dup(item)} style={{background:'none',border:'1px solid var(--border)',borderRadius:'5px',padding:'2px 6px',cursor:'pointer',fontSize:'12px',color:'var(--text-muted)',lineHeight:1}}>⧉</button><button title="Edit" onClick={()=>{setEditId(item.id);setShowAdd(false);setErr('')}} style={{background:'none',border:'1px solid var(--border)',borderRadius:'5px',padding:'2px 6px',cursor:'pointer',fontSize:'12px',color:'var(--text-secondary)',lineHeight:1}}>✎</button></div></div>}</div>)}</div>
+  </div>)
+}
+function SupplierMappingTab({cafeId,onSaved}){
+  const[suppliers,setSuppliers]=useState([]),[mapping,setMapping]=useState({}),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[saved,setSaved]=useState(false),[months,setMonths]=useState(12),[search,setSearch]=useState('')
+  useEffect(()=>{load(12)},[cafeId])
+  async function load(m){
+    setLoading(true)
+    const res=await fetch('/api/xero/suppliers?cafeId='+cafeId+'&months='+m,{headers:{Authorization:'Bearer '+getToken()}})
+    if(res.ok){const d=await res.json();setSuppliers(d.suppliers||[]);if(d.mapping&&Object.keys(d.mapping).length>0)setMapping(d.mapping)}
+    setLoading(false)
+  }
+  function toggle(name){setMapping(m=>({...m,[name]:!m[name]}))}
+  function setAll(val){const u={};suppliers.forEach(s=>{u[s.name]=val});setMapping(u)}
+  async function save(){
+    setSaving(true)
+    await fetch('/api/xero/supplier-mapping',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({cafeId,mapping})})
+    setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),2500)
+    if(onSaved)onSaved(mapping)
+  }
+  const selected=suppliers.filter(s=>mapping[s.name])
+  const cafeTotal=selected.reduce((s,x)=>s+x.total,0)
+  const allTotal=suppliers.reduce((s,x)=>s+x.total,0)
+  const filtered=search?suppliers.filter(s=>s.name.toLowerCase().includes(search.toLowerCase())):suppliers
+  if(loading) return <div style={{textAlign:'center',padding:'3rem',color:'var(--text-muted)',fontSize:'13px'}}>Loading supplier invoices from Xero…</div>
+  return(<div>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'1rem'}}>
+      <div>
+        <h2 style={{fontSize:'19px',marginBottom:'3px'}}>Supplier COGS mapping</h2>
+        <p style={{fontSize:'12px',color:'var(--text-muted)'}}>All suppliers with invoices in Xero, sorted by spend. Tick the ones that supply this café.</p>
+      </div>
+      <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
+        <div style={{display:'flex',gap:'2px'}}>{[3,6,12].map(m=><button key={m} onClick={()=>{setMonths(m);load(m)}} style={{fontSize:'11px',padding:'3px 8px',borderRadius:'20px',cursor:'pointer',background:months===m?'var(--espresso)':'transparent',border:'1px solid '+(months===m?'var(--espresso)':'var(--border)'),color:months===m?'var(--crema-light)':'var(--text-secondary)'}}>{m}m</button>)}</div>
+        <button onClick={save} disabled={saving} style={{fontSize:'12px',padding:'5px 14px',borderRadius:'7px',background:saved?'var(--success)':'var(--espresso)',color:'var(--crema-light)',border:'none',cursor:'pointer'}}>{saving?'Saving…':saved?'✓ Saved':'Save COGS suppliers'}</button>
+      </div>
+    </div>
+
+    {/* Summary */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'8px',marginBottom:'1rem'}}>
+      <div style={{background:'var(--success-light)',borderRadius:'9px',padding:'0.65rem 0.875rem',gridColumn:'span 2'}}>
+        <p style={{fontSize:'10px',color:'var(--success)',fontWeight:600,marginBottom:'2px',textTransform:'uppercase'}}>Café COGS</p>
+        <p style={{fontSize:'22px',fontFamily:'serif',color:'var(--success)'}}>{fmt(cafeTotal)}</p>
+        <p style={{fontSize:'10px',color:'var(--success)',marginTop:'1px'}}>{selected.length} supplier{selected.length!==1?'s':''} · annualised {fmt(cafeTotal/months*12)}</p>
+      </div>
+      <div style={{background:'var(--crema-pale)',borderRadius:'9px',padding:'0.65rem 0.875rem'}}>
+        <p style={{fontSize:'10px',color:'var(--text-muted)',fontWeight:600,marginBottom:'2px',textTransform:'uppercase'}}>Total spend</p>
+        <p style={{fontSize:'18px',fontFamily:'serif',color:'var(--text-secondary)'}}>{fmt(allTotal)}</p>
+        <p style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'1px'}}>All entities · {months}mo</p>
+      </div>
+      <div style={{background:'var(--crema-pale)',borderRadius:'9px',padding:'0.65rem 0.875rem'}}>
+        <p style={{fontSize:'10px',color:'var(--text-muted)',fontWeight:600,marginBottom:'2px',textTransform:'uppercase'}}>COGS %</p>
+        <p style={{fontSize:'18px',fontFamily:'serif',color:'var(--espresso)'}}>{allTotal>0?(cafeTotal/allTotal*100).toFixed(1):0}%</p>
+        <p style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'1px'}}>of total supplier spend</p>
+      </div>
+    </div>
+
+    {/* Controls */}
+    <div style={{display:'flex',gap:'8px',marginBottom:'10px',alignItems:'center'}}>
+      <input style={{...II,flex:1}} placeholder="Search suppliers…" value={search} onChange={e=>setSearch(e.target.value)}/>
+      <button onClick={()=>setAll(true)} style={{fontSize:'11px',padding:'4px 10px',borderRadius:'6px',border:'1px solid var(--border)',background:'white',cursor:'pointer',color:'var(--text-muted)',whiteSpace:'nowrap'}}>Select all</button>
+      <button onClick={()=>setAll(false)} style={{fontSize:'11px',padding:'4px 10px',borderRadius:'6px',border:'1px solid var(--border)',background:'white',cursor:'pointer',color:'var(--text-muted)',whiteSpace:'nowrap'}}>Clear all</button>
+    </div>
+
+    {suppliers.length===0&&<div style={{textAlign:'center',padding:'2.5rem',background:'white',borderRadius:'12px',border:'1px solid var(--border)'}}><div style={{fontSize:'32px',marginBottom:'8px'}}>📦</div><p style={{color:'var(--text-secondary)',fontSize:'13px',marginBottom:'4px'}}>No supplier invoices found in Xero for this period.</p><p style={{color:'var(--text-muted)',fontSize:'12px'}}>Make sure Xero is reconnected with the new credentials so supplier data can be accessed.</p></div>}
+
+    {/* Selected first, then unselected */}
+    <div style={{display:'grid',gap:'4px'}}>
+      {filtered.filter(s=>mapping[s.name]).length>0&&<>
+        <div style={{fontSize:'10px',color:'var(--success)',fontWeight:600,padding:'4px 2px',textTransform:'uppercase',letterSpacing:'.05em'}}>Selected — café COGS suppliers</div>
+        {filtered.filter(s=>mapping[s.name]).map(s=>{
+          const pct2=allTotal>0?Math.round(s.total/allTotal*100):0
+          return(<div key={s.name} onClick={()=>toggle(s.name)} style={{display:'flex',alignItems:'center',gap:'10px',padding:'9px 12px',borderRadius:'8px',border:'1px solid var(--success)',background:'#f0faf4',cursor:'pointer',marginBottom:'2px'}}>
+            <div style={{width:'18px',height:'18px',borderRadius:'4px',border:'2px solid var(--success)',background:'var(--success)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}><span style={{color:'white',fontSize:'11px',fontWeight:700}}>✓</span></div>
+            <span style={{flex:1,fontSize:'13px',fontWeight:600,color:'var(--espresso)'}}>{s.name}</span>
+            <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+              <div style={{width:'80px',height:'4px',background:'var(--crema-pale)',borderRadius:'2px'}}><div style={{height:'100%',width:Math.min(pct2*2,100)+'%',background:'var(--success)',borderRadius:'2px',minWidth:'2px'}}/></div>
+              <span style={{fontSize:'13px',fontFamily:'serif',color:'var(--espresso)',width:'90px',textAlign:'right',fontWeight:600}}>{fmt(s.total)}</span>
+              <span style={{fontSize:'10px',color:'var(--text-muted)',width:'28px',textAlign:'right'}}>{pct2}%</span>
+            </div>
+          </div>)
+        })}
+        {filtered.filter(s=>!mapping[s.name]).length>0&&<div style={{fontSize:'10px',color:'var(--text-muted)',fontWeight:600,padding:'4px 2px',marginTop:'6px',textTransform:'uppercase',letterSpacing:'.05em'}}>Not included</div>}
+      </>}
+      {filtered.filter(s=>!mapping[s.name]).map(s=>{
+        const pct2=allTotal>0?Math.round(s.total/allTotal*100):0
+        return(<div key={s.name} onClick={()=>toggle(s.name)} style={{display:'flex',alignItems:'center',gap:'10px',padding:'9px 12px',borderRadius:'8px',border:'1px solid var(--border)',background:'white',cursor:'pointer',marginBottom:'2px'}}>
+          <div style={{width:'18px',height:'18px',borderRadius:'4px',border:'2px solid var(--border)',background:'white',flexShrink:0}}/>
+          <span style={{flex:1,fontSize:'13px',color:'var(--text-secondary)'}}>{s.name}</span>
+          <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+            <div style={{width:'80px',height:'4px',background:'var(--crema-pale)',borderRadius:'2px'}}><div style={{height:'100%',width:Math.min(pct2*2,100)+'%',background:'var(--border)',borderRadius:'2px',minWidth:s.total>0?'2px':'0'}}/></div>
+            <span style={{fontSize:'13px',fontFamily:'serif',color:'var(--text-muted)',width:'90px',textAlign:'right'}}>{s.total>0?fmt(s.total):'—'}</span>
+            {s.total>0&&<span style={{fontSize:'10px',color:'var(--text-muted)',width:'28px',textAlign:'right'}}>{pct2}%</span>}
+          </div>
+        </div>)
+      })}
+    </div>
   </div>)
 }
 function AdjustmentsTab({cafeId,adjustments,onRefresh,xeroLines,xeroConn}){
@@ -151,61 +246,6 @@ function AdjustmentsTab({cafeId,adjustments,onRefresh,xeroLines,xeroConn}){
     {adjustments.length>0&&<div style={{display:'grid',gap:'6px'}}>{adjustments.map(a=>{const resolved=resolve(a,xeroAmt(a.xero_line));const rt=a.result_type||'add_back';return(<div key={a.id} style={{background:'white',border:'1px solid var(--border)',borderRadius:'10px',padding:'0.75rem 1rem',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}><div style={{flex:1}}><div style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'3px',flexWrap:'wrap'}}><strong style={{fontSize:'13px'}}>{a.label}</strong><span style={{fontSize:'10px',padding:'1px 6px',borderRadius:'10px',background:RT_BG[rt],color:RT_COLORS[rt],fontWeight:600}}>{RT_LABELS[rt]}</span>{a.source==='xero'&&<span style={{fontSize:'10px',padding:'1px 6px',borderRadius:'10px',background:'#e8f4fd',color:'#0077b5'}}>Xero: {a.xero_line}</span>}</div>{a.description&&<div style={{fontSize:'11px',color:'var(--text-muted)'}}>{a.description}</div>}</div><div style={{display:'flex',alignItems:'center',gap:'10px',marginLeft:'12px',flexShrink:0}}><span style={{fontSize:'15px',fontWeight:600,fontFamily:'serif',color:RT_COLORS[rt]}}>{rt==='add_back'?'+':'-'}{fmt(resolved)}/yr</span><button onClick={()=>del(a.id)} style={{background:'none',border:'none',color:'var(--danger)',cursor:'pointer',fontSize:'15px',padding:'0 2px',opacity:0.6}}>✕</button></div></div>)})}</div>}
   </div>)
 }
-function SupplierMappingTab({cafeId,onSaved}){
-  const[suppliers,setSuppliers]=useState([]),[mapping,setMapping]=useState({}),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[saved,setSaved]=useState(false),[months,setMonths]=useState(12),[search,setSearch]=useState(''),[showAll,setShowAll]=useState(false)
-  useEffect(()=>{load(12)},[cafeId])
-  async function load(m){setLoading(true);const res=await fetch('/api/xero/suppliers?cafeId='+cafeId+'&months='+m,{headers:{Authorization:'Bearer '+getToken()}});if(res.ok){const d=await res.json();setSuppliers(d.suppliers||[]);if(d.mapping&&Object.keys(d.mapping).length>0)setMapping(d.mapping)};setLoading(false)}
-  function toggle(name){setMapping(m=>({...m,[name]:!m[name]}))}
-  function setAll(val){const u={};suppliers.forEach(s=>{u[s.name]=val});setMapping(u)}
-  function selectAllCogs(){const u={...mapping};suppliers.filter(s=>s.isCogs).forEach(s=>{u[s.name]=true});setMapping(u)}
-  async function save(){setSaving(true);await fetch('/api/xero/supplier-mapping',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({cafeId,mapping})});setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),2500);if(onSaved)onSaved(mapping)}
-  const cafeItems=suppliers.filter(s=>mapping[s.name])
-  const cafeTotal=cafeItems.reduce((s,x)=>s+(x.amount||0),0)
-  const allTotal=suppliers.reduce((s,x)=>s+(x.amount||0),0)
-  const filtered=search?suppliers.filter(s=>s.name.toLowerCase().includes(search.toLowerCase())):suppliers
-  const display=showAll?filtered:filtered.filter(s=>s.isCogs||mapping[s.name])
-  const sections={}
-  display.forEach(s=>{const sec=s.section||'Other';if(!sections[sec])sections[sec]=[];sections[sec].push(s)})
-  if(loading) return <div style={{textAlign:'center',padding:'3rem',color:'var(--text-muted)',fontSize:'13px'}}>Loading P&L lines from Xero…</div>
-  return(<div>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'1rem'}}>
-      <div><h2 style={{fontSize:'19px',marginBottom:'3px'}}>Supplier COGS mapping</h2><p style={{fontSize:'12px',color:'var(--text-muted)'}}>Tick the P&L lines that are this café’s true cost of goods. COGS lines shown first.</p></div>
-      <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
-        <div style={{display:'flex',gap:'2px'}}>{[3,6,12].map(m=><button key={m} onClick={()=>{setMonths(m);load(m)}} style={{fontSize:'11px',padding:'3px 8px',borderRadius:'20px',cursor:'pointer',background:months===m?'var(--espresso)':'transparent',border:'1px solid '+(months===m?'var(--espresso)':'var(--border)'),color:months===m?'var(--crema-light)':'var(--text-secondary)'}}>{m}m</button>)}</div>
-        <button onClick={save} disabled={saving} style={{fontSize:'12px',padding:'5px 14px',borderRadius:'7px',background:saved?'var(--success)':'var(--espresso)',color:'var(--crema-light)',border:'none',cursor:'pointer'}}>{saving?'Saving…':saved?'✓ Saved':'Save COGS lines'}</button>
-      </div>
-    </div>
-    <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'8px',marginBottom:'1rem'}}>
-      <div style={{background:'var(--success-light)',borderRadius:'9px',padding:'0.65rem 0.875rem',gridColumn:'span 2'}}><p style={{fontSize:'10px',color:'var(--success)',fontWeight:600,marginBottom:'2px',textTransform:'uppercase'}}>Café COGS (selected)</p><p style={{fontSize:'22px',fontFamily:'serif',color:'var(--success)'}}>{fmt(cafeTotal)}</p><p style={{fontSize:'10px',color:'var(--success)',marginTop:'1px'}}>{cafeItems.length} line{cafeItems.length!==1?'s':''} · annualised {fmt(cafeTotal/months*12)}</p></div>
-      <div style={{background:'var(--crema-pale)',borderRadius:'9px',padding:'0.65rem 0.875rem'}}><p style={{fontSize:'10px',color:'var(--text-muted)',fontWeight:600,marginBottom:'2px',textTransform:'uppercase'}}>P&L total</p><p style={{fontSize:'18px',fontFamily:'serif',color:'var(--text-secondary)'}}>{fmt(allTotal)}</p></div>
-      <div style={{background:'var(--crema-pale)',borderRadius:'9px',padding:'0.65rem 0.875rem'}}><p style={{fontSize:'10px',color:'var(--text-muted)',fontWeight:600,marginBottom:'2px',textTransform:'uppercase'}}>COGS %</p><p style={{fontSize:'18px',fontFamily:'serif',color:'var(--espresso)'}}>{allTotal>0?(cafeTotal/allTotal*100).toFixed(1):0}%</p></div>
-    </div>
-    <div style={{display:'flex',gap:'8px',marginBottom:'10px',alignItems:'center',flexWrap:'wrap'}}>
-      <input style={{...II,flex:1,minWidth:'160px'}} placeholder="Search lines…" value={search} onChange={e=>setSearch(e.target.value)}/>
-      <button onClick={selectAllCogs} style={{fontSize:'11px',padding:'4px 10px',borderRadius:'6px',border:'1px solid var(--success)',background:'var(--success-light)',cursor:'pointer',color:'var(--success)',fontWeight:500,whiteSpace:'nowrap'}}>Select all COGS</button>
-      <button onClick={()=>setAll(false)} style={{fontSize:'11px',padding:'4px 10px',borderRadius:'6px',border:'1px solid var(--border)',background:'white',cursor:'pointer',color:'var(--text-muted)',whiteSpace:'nowrap'}}>Clear all</button>
-      <button onClick={()=>setShowAll(v=>!v)} style={{fontSize:'11px',padding:'4px 10px',borderRadius:'6px',border:'1px solid var(--border)',background:showAll?'var(--espresso)':'white',color:showAll?'var(--crema-light)':'var(--text-muted)',cursor:'pointer',whiteSpace:'nowrap'}}>{showAll?'COGS only':'Show all sections'}</button>
-    </div>
-    {suppliers.length===0&&<div style={{textAlign:'center',padding:'2.5rem',background:'white',borderRadius:'12px',border:'1px solid var(--border)'}}><div style={{fontSize:'32px',marginBottom:'8px'}}>📦</div><p style={{color:'var(--text-secondary)',fontSize:'13px'}}>No P&L data found in Xero for this period.</p></div>}
-    {Object.entries(sections).map(([secName,rows])=>(<div key={secName} style={{marginBottom:'12px'}}>
-      <div style={{fontSize:'11px',fontWeight:600,color:'var(--espresso)',padding:'4px 2px',marginBottom:'4px',display:'flex',alignItems:'center',gap:'6px'}}>
-        <span>{secName}</span>
-        {rows.some(r=>r.isCogs)&&<span style={{fontSize:'9px',padding:'1px 6px',borderRadius:'8px',background:'var(--success-light)',color:'var(--success)',fontWeight:700}}>COGS</span>}
-        <span style={{fontSize:'10px',color:'var(--text-muted)',fontWeight:400}}>{fmt(rows.reduce((s,r)=>s+(r.amount||0),0))}</span>
-      </div>
-      <div style={{display:'grid',gap:'3px'}}>{rows.map(s=>{const on=!!mapping[s.name];const pct2=allTotal>0?Math.round((s.amount||0)/allTotal*100):0;return(<div key={s.name} onClick={()=>toggle(s.name)} style={{display:'flex',alignItems:'center',gap:'10px',padding:'8px 12px',borderRadius:'8px',border:'1px solid '+(on?'var(--success)':'var(--border)'),background:on?'#f0faf4':'white',cursor:'pointer'}}>
-        <div style={{width:'18px',height:'18px',borderRadius:'4px',border:'2px solid '+(on?'var(--success)':'var(--border)'),background:on?'var(--success)':'white',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>{on&&<span style={{color:'white',fontSize:'11px',fontWeight:700}}>✓</span>}</div>
-        <span style={{flex:1,fontSize:'13px',fontWeight:on?600:400,color:on?'var(--espresso)':'var(--text-secondary)'}}>{s.name}</span>
-        {s.isCogs&&!on&&<span style={{fontSize:'9px',padding:'1px 5px',borderRadius:'6px',background:'var(--crema-pale)',color:'var(--text-muted)'}}>COGS</span>}
-        <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-          {(s.amount||0)>0&&<div style={{width:'80px',height:'4px',background:'var(--crema-pale)',borderRadius:'2px'}}><div style={{height:'100%',width:Math.min(pct2*3,100)+'%',background:on?'var(--success)':'var(--border)',borderRadius:'2px',minWidth:'2px'}}/></div>}
-          <span style={{fontSize:'13px',fontFamily:'serif',color:on?'var(--espresso)':'var(--text-muted)',width:'90px',textAlign:'right',fontWeight:on?600:400}}>{(s.amount||0)>0?fmt(s.amount):'—'}</span>
-          {(s.amount||0)>0&&<span style={{fontSize:'10px',color:'var(--text-muted)',width:'32px',textAlign:'right'}}>{pct2}%</span>}
-        </div>
-      </div>)})}</div>
-    </div>))}
-  </div>)
-}
 function XeroMappingTab({cafeId,onMappingSaved}){
   const[raw,setRaw]=useState(null),[mapping,setMapping]=useState({}),[saving,setSaving]=useState(false),[loading,setLoading]=useState(true),[saved,setSaved]=useState(false),[months,setMonths]=useState(12)
   useEffect(()=>{load(12)},[cafeId])
@@ -213,8 +253,7 @@ function XeroMappingTab({cafeId,onMappingSaved}){
   function toggle(name){setMapping(m=>({...m,[name]:!m[name]}))}
   function setAll(sec,val){const u={};sec.rows.forEach(r=>{u[r.name]=val});setMapping(m=>({...m,...u}))}
   async function save(){setSaving(true);await fetch('/api/xero/mapping',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+getToken()},body:JSON.stringify({cafeId,mapping})});setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),2500);if(onMappingSaved)onMappingSaved(mapping)}
-  const incTotal=raw?.sections?.reduce((st,sec)=>st+sec.rows.reduce((sr,r)=>sr+(mapping[r.name]?r.amount:0),0),0)||0
-  const allTotal=raw?.sections?.reduce((st,sec)=>st+sec.rows.reduce((sr,r)=>sr+r.amount,0),0)||0
+  const incTotal=raw?.sections?.reduce((st,sec)=>st+sec.rows.reduce((sr,r)=>sr+(mapping[r.name]?r.amount:0),0),0)||0,allTotal=raw?.sections?.reduce((st,sec)=>st+sec.rows.reduce((sr,r)=>sr+r.amount,0),0)||0
   if(loading) return <div style={{textAlign:'center',padding:'3rem',color:'var(--text-muted)',fontSize:'13px'}}>Loading Xero P&L…</div>
   if(!raw) return <div style={{textAlign:'center',padding:'3rem',color:'var(--danger)',fontSize:'13px'}}>Could not load Xero data.</div>
   return(<div>
@@ -265,8 +304,7 @@ export default function CafeDashboard(){
   async function loadEq(){const res=await fetch('/api/cafes/'+cafeId+'/equipment',{headers:{Authorization:'Bearer '+getToken()}});if(res.ok){const d=await res.json();setEq(d.equipment||[])}}
   async function loadAdj(){const res=await fetch('/api/cafes/'+cafeId+'/adjustments',{headers:{Authorization:'Bearer '+getToken()}});if(res.ok){const d=await res.json();setAdj(d.adjustments||[])}}
   async function loadXero(months){
-    setXeroLoading(true)
-    const m=months||settings.months
+    setXeroLoading(true);const m=months||settings.months
     const[plRes,rawRes,supRes]=await Promise.all([
       fetch('/api/xero/reports?cafeId='+cafeId+'&months='+m,{headers:{Authorization:'Bearer '+getToken()}}),
       fetch('/api/xero/raw?cafeId='+cafeId+'&months='+m,{headers:{Authorization:'Bearer '+getToken()}}),
@@ -274,7 +312,13 @@ export default function CafeDashboard(){
     ])
     if(plRes.ok){const d=await plRes.json();setXeroPL(d.pl);if(d.tenantName)setXeroName(d.tenantName)}
     if(rawRes.ok){const d=await rawRes.json();setXeroLines(d.raw?.sections?.flatMap(s=>s.rows)||[])}
-    if(supRes.ok){const d=await supRes.json();const mapped=d.suppliers?.filter(s=>d.mapping?.[s.name]);const total=mapped?.reduce((s,x)=>s+(x.amount||0),0)||0;if(mapped?.length>0)setSupplierCogs({total,months:m,count:mapped.length})}
+    if(supRes.ok){
+      const d=await supRes.json()
+      // Use saved mapping to compute COGS from supplier totals (bills)
+      const mapped=d.suppliers?.filter(s=>d.mapping?.[s.name])
+      const total=mapped?.reduce((s,x)=>s+(x.total||0),0)||0
+      if(mapped?.length>0)setSupplierCogs({total,months:m,count:mapped.length})
+    }
     setXeroLoading(false)
   }
   function handleMappingSaved(){loadXero(settings.months)}
@@ -323,10 +367,10 @@ export default function CafeDashboard(){
             <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'6px',marginBottom:'0.875rem'}}>{[['Gross',fmt(sd.grossSales)],['Net',fmt(sd.netSales)],['Avg/mo',fmt(sd.avgMonthlySales)],['Annualised',fmt(sd.annualisedSales)]].map(it=><div key={it[0]} style={{background:'white',border:'1px solid var(--border)',borderRadius:'9px',padding:'0.6rem 0.8rem'}}><p style={{fontSize:'10px',color:'var(--text-muted)',marginBottom:'1px'}}>{it[0]}</p><p style={{fontSize:'16px',fontFamily:'serif',color:'var(--espresso)'}}>{it[1]}</p></div>)}</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'8px'}}>
               <div style={s.card}>
-                <h3 style={s.ct}>Profit and loss{supplierCogs?.count>0&&<span style={{fontSize:'10px',fontWeight:400,color:'var(--success)',marginLeft:'5px'}}>COGS: {supplierCogs.count} lines ✓</span>}{!supplierCogs?.count&&xeroPL?.revenue>0&&<span style={{fontSize:'10px',fontWeight:400,color:'var(--success)',marginLeft:'5px'}}>via Xero ✓</span>}</h3>
+                <h3 style={s.ct}>Profit and loss{supplierCogs?.count>0&&<span style={{fontSize:'10px',fontWeight:400,color:'var(--success)',marginLeft:'5px'}}>COGS: {supplierCogs.count} suppliers ✓</span>}{!supplierCogs?.count&&xeroPL?.revenue>0&&<span style={{fontSize:'10px',fontWeight:400,color:'var(--success)',marginLeft:'5px'}}>via Xero ✓</span>}</h3>
                 {[['Revenue',fmt(val.revenue),false,false],['COGS','−'+fmt(val.cogs),true,false],['Gross profit',fmt(val.grossProfit)+' ('+pct(val.grossMargin)+')',false,true],['Operating','−'+fmt(val.totalExpenses-val.cogs),true,false],['EBITDA',fmt(val.ebitda)+' ('+pct(val.ebitdaMargin)+')',false,true],['Add-backs','+ '+fmt(val.addBacks),false,false],['Adj. EBITDA',fmt(val.adjustedEbitda),false,true]].map((r,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',padding:'3px 0',borderBottom:'1px solid var(--border)',fontWeight:r[3]?600:400}}><span style={{fontSize:'11px',color:'var(--text-secondary)'}}>{r[0]}</span><span style={{fontSize:'11px',color:r[2]?'var(--danger)':'inherit'}}>{r[1]}</span></div>)}
                 {val.equipmentValue>0&&<div style={{display:'flex',justifyContent:'space-between',padding:'3px 0',fontWeight:600}}><span style={{fontSize:'11px',color:'var(--text-secondary)'}}>Equipment (owned)</span><span style={{fontSize:'11px',color:'var(--sage)'}}>+ {fmt(val.equipmentValue)}</span></div>}
-                {xeroConn&&!supplierCogs?.count&&<div style={{marginTop:'8px',padding:'5px 8px',background:'var(--warning-light)',borderRadius:'6px',fontSize:'10px',color:'var(--warning)'}}>→ Go to Suppliers tab to set your café COGS lines.</div>}
+                {xeroConn&&!supplierCogs?.count&&<div style={{marginTop:'8px',padding:'5px 8px',background:'var(--warning-light)',borderRadius:'6px',fontSize:'10px',color:'var(--warning)'}}>→ Go to Suppliers tab to map your café’s COGS suppliers.</div>}
               </div>
               {hs&&<div style={s.card}><h3 style={s.ct}>Business health</h3><div style={{textAlign:'center',padding:'0.4rem 0 0.875rem'}}><div style={{fontSize:'42px',fontFamily:'serif',color:hc,lineHeight:1}}>{hs.total}</div><div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'1px'}}>out of 100</div><div style={{display:'inline-block',marginTop:'4px',padding:'2px 9px',borderRadius:'20px',background:hc+'20',color:hc,fontWeight:500,fontSize:'11px'}}>{hs.label}</div></div>{hs.breakdown?.map((it,i)=>{const bc=it.score/it.max>=0.7?'var(--success)':it.score/it.max>=0.4?'var(--warning)':'var(--danger)';return <div key={i} style={{marginBottom:'6px'}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:'1px'}}><span style={{fontSize:'10px',color:'var(--text-secondary)'}}>{it.label}</span><span style={{fontSize:'10px',fontWeight:500}}>{it.score}/{it.max}</span></div><div style={{height:'3px',background:'var(--crema-pale)',borderRadius:'2px'}}><div style={{height:'100%',width:(it.score/it.max*100)+'%',background:bc,borderRadius:'2px'}}/></div></div>})}</div>}
             </div>
