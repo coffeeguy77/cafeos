@@ -26,54 +26,40 @@ export default async function handler(req,res){
     const{accessToken,tenantId}=await getAccessToken(cafeId)
     const headers={'Authorization':'Bearer '+accessToken,'xero-tenant-id':tenantId,'Accept':'application/json'}
 
-    // Fetch P&L — we have this scope
-    const to=new Date(),from=new Date()
+    // Date range
+    const to=new Date()
+    const from=new Date()
     from.setMonth(from.getMonth()-parseInt(months))
-    const fmt=d=>d.toISOString().split('T')[0]
-    const params=new URLSearchParams({fromDate:fmt(from),toDate:fmt(to),standardLayout:'true'})
-    const plRes=await fetch('https://api.xero.com/api.xro/2.0/Reports/ProfitAndLoss?'+params,{headers})
+    const fromStr=from.toISOString().split('T')[0]
+    const toStr=to.toISOString().split('T')[0]
 
-    let suppliers=[]
-
-    if(plRes.ok){
-      const plData=await plRes.json()
-      const report=plData.Reports?.[0]
-      if(report){
-        const numVal=cells=>{const v=cells?.[cells.length-1]?.Value;return v?Math.abs(parseFloat(v.replace(/[^0-9.-]/g,''))||0):0}
-        for(const sec of report.Rows||[]){
-          if(sec.RowType!=='Section') continue
-          const title=(sec.Title||'').toLowerCase()
-          // Include ALL sections — COGS, expenses, revenue — let user decide
-          for(const row of sec.Rows||[]){
-            if(row.RowType!=='Row') continue
-            const name=row.Cells?.[0]?.Value||''
-            const amount=numVal(row.Cells)
-            if(name&&name!=='Total'&&amount>0){
-              suppliers.push({
-                name,
-                amount,
-                section:sec.Title||'Other',
-                isCogs:title.includes('cost')||title.includes('cogs')||title.includes('direct'),
-                isExpense:title.includes('expense')||title.includes('overhead')||title.includes('operating'),
-                isRevenue:title.includes('revenue')||title.includes('income')||title.includes('trading'),
-              })
-            }
-          }
-        }
+    // Fetch all ACCPAY invoices (bills) in date range — paginated
+    const spendByContact={}
+    let page=1,hasMore=true
+    while(hasMore){
+      const url='https://api.xero.com/api.xro/2.0/Invoices?Type=ACCPAY&Status=AUTHORISED,PAID&DateFrom='+fromStr+'&DateTo='+toStr+'&page='+page+'&summaryOnly=false'
+      const r=await fetch(url,{headers})
+      if(!r.ok){console.error('Invoices error:',r.status,await r.text());break}
+      const d=await r.json()
+      const invoices=d.Invoices||[]
+      for(const inv of invoices){
+        const name=inv.Contact?.Name
+        if(!name) continue
+        const amt=parseFloat(inv.SubTotal||0)
+        spendByContact[name]=(spendByContact[name]||0)+amt
       }
-    }else{
-      const errText=await plRes.text()
-      console.error('P&L fetch failed:',plRes.status,errText)
+      hasMore=invoices.length===100
+      page++
+      if(page>20) break // safety cap
     }
 
-    // Sort: COGS first, then by amount desc
-    suppliers.sort((a,b)=>{
-      if(a.isCogs&&!b.isCogs) return -1
-      if(!a.isCogs&&b.isCogs) return 1
-      return b.amount-a.amount
-    })
+    // Build supplier list sorted by spend
+    const suppliers=Object.entries(spendByContact)
+      .map(([name,total])=>({name,total:Math.round(total*100)/100}))
+      .filter(s=>s.total>0)
+      .sort((a,b)=>b.total-a.total)
 
-    // Load saved supplier mapping
+    // Load saved mapping
     const{data:mapRow}=await supabaseAdmin.from('xero_supplier_mappings').select('mapping').eq('cafe_id',cafeId).single()
 
     return res.status(200).json({suppliers,mapping:mapRow?.mapping||{}})
