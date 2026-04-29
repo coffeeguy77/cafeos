@@ -30,65 +30,42 @@ export default async function handler(req,res){
     const from=new Date()
     from.setMonth(from.getMonth()-parseInt(months))
 
-    // Xero DateTime filter format: DateTime(yyyy,mm,dd)
-    const xeroDate=d=>'DateTime('+d.getFullYear()+','+(d.getMonth()+1)+','+d.getDate()+')'
-    const fromXero=xeroDate(from)
-    const toXero=xeroDate(to)
-    const fromStr=from.toISOString().split('T')[0]
-    const toStr=to.toISOString().split('T')[0]
-
+    // BankTransactions Type=SPEND — "Spend Money" transactions
+    // Scope: accounting.banktransactions
+    // This covers all contacts you have paid directly
     const spendByContact={}
-
-    // ── SOURCE 1: Payments against ACCPAY invoices (supplier bill payments) ──
-    // This is the canonical way to get "what did we actually pay suppliers"
     let page=1,hasMore=true
-    while(hasMore){
-      const where='Date>='+'DateTime('+from.getFullYear()+','+(from.getMonth()+1)+','+from.getDate()+')'
-        +'&&Date<='+'DateTime('+to.getFullYear()+','+(to.getMonth()+1)+','+to.getDate()+')'
-        +'&&Status=="AUTHORISED"'
-      const params=new URLSearchParams({where,page:String(page)})
-      const r=await fetch('https://api.xero.com/api.xro/2.0/Payments?'+params,{headers})
-      if(!r.ok){console.error('Payments error:',r.status,await r.text());break}
-      const d=await r.json()
-      const payments=d.Payments||[]
-      for(const p of payments){
-        // Only count payments against ACCPAY (supplier) invoices
-        if(p.Invoice?.Type!=='ACCPAY') continue
-        const name=p.Invoice?.Contact?.Name
-        if(!name) continue
-        const amt=parseFloat(p.Amount||0)
-        if(amt>0) spendByContact[name]=(spendByContact[name]||0)+amt
-      }
-      hasMore=payments.length===100
-      page++
-      if(page>20) break
-    }
 
-    // ── SOURCE 2: Spend Money bank transactions ──
-    // Catches direct supplier payments not raised as invoices
-    page=1;hasMore=true
     while(hasMore){
-      const where='Type=="SPEND"&&Status=="AUTHORISED"&&Date>='
-        +'DateTime('+from.getFullYear()+','+(from.getMonth()+1)+','+from.getDate()+')'
-        +'&&Date<='+'DateTime('+to.getFullYear()+','+(to.getMonth()+1)+','+to.getDate()+')'
+      const fromD='DateTime('+from.getFullYear()+','+(from.getMonth()+1)+','+from.getDate()+')'
+      const toD='DateTime('+to.getFullYear()+','+(to.getMonth()+1)+','+to.getDate()+')'
+      const where='Type=="SPEND"&&Date>='+fromD+'&&Date<='+toD
       const params=new URLSearchParams({where,page:String(page)})
       const r=await fetch('https://api.xero.com/api.xro/2.0/BankTransactions?'+params,{headers})
-      if(!r.ok){console.error('BankTx error:',r.status);break}
+
+      if(!r.ok){
+        const err=await r.text()
+        console.error('BankTransactions error:',r.status,err)
+        return res.status(500).json({error:'Xero BankTransactions failed: '+r.status+' '+err.substring(0,200)})
+      }
+
       const d=await r.json()
       const txns=d.BankTransactions||[]
+
       for(const tx of txns){
         if(tx.Type!=='SPEND') continue
+        if(tx.Status==='DELETED'||tx.Status==='VOIDED') continue
         const name=tx.Contact?.Name
         if(!name) continue
         const amt=parseFloat(tx.Total||0)
         if(amt>0) spendByContact[name]=(spendByContact[name]||0)+amt
       }
+
       hasMore=txns.length===100
       page++
-      if(page>20) break
+      if(page>50) break
     }
 
-    // Build sorted list
     const suppliers=Object.entries(spendByContact)
       .map(([name,total])=>({name,total:Math.round(total*100)/100}))
       .filter(s=>s.total>0)
