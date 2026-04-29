@@ -1,4 +1,4 @@
-import{exchangeCode,getXeroConnections}from '../../../lib/xero'
+import{exchangeCode,getTenants}from '../../../lib/xero'
 import{supabaseAdmin}from '../../../lib/supabase'
 
 export default async function handler(req,res){
@@ -7,7 +7,8 @@ export default async function handler(req,res){
   if(!code||!cafeId) return res.status(400).json({error:'Missing code or state'})
   try{
     const tokens=await exchangeCode(code)
-    const connections=await getXeroConnections(tokens.access_token)
+    if(!tokens.access_token) return res.redirect('/dashboard/'+cafeId+'?xero_error=token_failed')
+    const connections=await getTenants(tokens.access_token)
     const tenant=connections[0]
     if(!tenant) return res.redirect('/dashboard/'+cafeId+'?xero_error=no_org')
     const expiresAt=new Date(Date.now()+(tokens.expires_in||1800)*1000).toISOString()
