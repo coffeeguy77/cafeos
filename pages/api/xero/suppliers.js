@@ -7,7 +7,7 @@ async function getAccessToken(cafeId){
   let accessToken=ig.access_token
   if(new Date(ig.token_expires_at)<=new Date(Date.now()+60000)){
     const r=await refreshXeroToken(ig.refresh_token)
-    if(!r.access_token) throw new Error('Token refresh failed: '+JSON.stringify(r))
+    if(!r.access_token) throw new Error('Token refresh failed')
     accessToken=r.access_token
     await supabaseAdmin.from('integrations').update({access_token:accessToken,refresh_token:r.refresh_token,token_expires_at:new Date(Date.now()+r.expires_in*1000).toISOString()}).eq('id',ig.id)
   }
@@ -32,17 +32,17 @@ export default async function handler(req,res){
     const add=(id,name,amt)=>{
       if(!name||!(amt>0)) return
       const key=id||name
-      if(!byContact[key]) byContact[key]={contactId:id||null,supplierName:name,totalPaid:0,transactionCount:0}
-      byContact[key].totalPaid+=amt
-      byContact[key].transactionCount++
+      if(!byContact[key]) byContact[key]={contactId:id||null,name,total:0,count:0}
+      byContact[key].total+=amt
+      byContact[key].count++
     }
 
-    // SOURCE 1: GET /Payments — filter to ACCPAY (supplier bill payments) in code
-    let page=1,hasMore=true,paymentsStatus='ok'
+    // SOURCE 1: GET /Payments filtered to ACCPAY in code
+    let page=1,hasMore=true,p1status='ok'
     while(hasMore){
       const where='Date>='+xd(from)+'&&Date<='+xd(to)+'&&Status=="AUTHORISED"'
       const r=await fetch('https://api.xero.com/api.xro/2.0/Payments?'+new URLSearchParams({where,page:String(page)}),{headers})
-      if(!r.ok){paymentsStatus=r.status+' '+await r.text();break}
+      if(!r.ok){p1status=r.status;break}
       const d=await r.json()
       const payments=d.Payments||[]
       for(const p of payments){
@@ -53,12 +53,11 @@ export default async function handler(req,res){
     }
 
     // SOURCE 2: GET /BankTransactions Type=SPEND
-    let bankStatus='ok'
-    page=1;hasMore=true
+    page=1;hasMore=true;let p2status='ok'
     while(hasMore){
       const where='Type=="SPEND"&&Date>='+xd(from)+'&&Date<='+xd(to)
       const r=await fetch('https://api.xero.com/api.xro/2.0/BankTransactions?'+new URLSearchParams({where,page:String(page)}),{headers})
-      if(!r.ok){bankStatus=r.status+' '+await r.text();break}
+      if(!r.ok){p2status=r.status;break}
       const d=await r.json()
       const txns=d.BankTransactions||[]
       for(const tx of txns){
@@ -69,17 +68,13 @@ export default async function handler(req,res){
     }
 
     const suppliers=Object.values(byContact)
-      .map(s=>({...s,totalPaid:Math.round(s.totalPaid*100)/100}))
-      .sort((a,b)=>b.totalPaid-a.totalPaid)
+      .map(s=>({...s,total:Math.round(s.total*100)/100}))
+      .sort((a,b)=>b.total-a.total)
 
     const{data:mapRow}=await supabaseAdmin.from('xero_supplier_mappings').select('mapping').eq('cafe_id',cafeId).single()
-    return res.status(200).json({
-      suppliers,
-      mapping:mapRow?.mapping||{},
-      debug:{paymentsStatus,bankStatus,count:suppliers.length}
-    })
+    return res.status(200).json({suppliers,mapping:mapRow?.mapping||{},debug:{p1:p1status,p2:p2status,count:suppliers.length}})
   }catch(e){
     console.error('Suppliers error:',e.message)
-    return res.status(500).json({error:e.message,details:e.stack?.split('\n')[0]||null})
+    return res.status(500).json({error:e.message})
   }
-      }
+}
