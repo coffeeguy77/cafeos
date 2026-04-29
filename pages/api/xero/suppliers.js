@@ -32,40 +32,54 @@ export default async function handler(req,res){
     const fromStr=from.toISOString().split('T')[0]
     const toStr=to.toISOString().split('T')[0]
 
-    // Fetch bills (ACCPAY = what we pay to suppliers)
-    // Use where filter with URL encoding for Type==ACCPAY
     const spendByContact={}
-    let page=1,hasMore=true
 
+    // 1. Spend Money transactions (BankTransactions Type=SPEND)
+    let page=1,hasMore=true
     while(hasMore){
-      // Use the where parameter to filter by type server-side
       const params=new URLSearchParams({
-        where:'Type=="ACCPAY"',
+        where:'Type=="SPEND"',
+        fromDate:fromStr,
+        toDate:toStr,
+        page:String(page)
+      })
+      const r=await fetch('https://api.xero.com/api.xro/2.0/BankTransactions?'+params,{headers})
+      if(!r.ok){console.error('BankTx error:',r.status,await r.text());break}
+      const d=await r.json()
+      const txns=d.BankTransactions||[]
+      for(const tx of txns){
+        if(tx.Type!=='SPEND') continue
+        if(tx.IsReconciled===false&&tx.Status==='DELETED') continue
+        const name=tx.Contact?.Name
+        if(!name) continue
+        const amt=parseFloat(tx.Total||tx.SubTotal||0)
+        if(amt>0) spendByContact[name]=(spendByContact[name]||0)+amt
+      }
+      hasMore=txns.length===100
+      page++
+      if(page>20) break
+    }
+
+    // 2. Also include ACCPAY bills (purchase invoices from suppliers)
+    page=1;hasMore=true
+    while(hasMore){
+      const params=new URLSearchParams({
+        where:'Type=="ACCPAY"&&(Status=="AUTHORISED"||Status=="PAID")',
         DateFrom:fromStr,
         DateTo:toStr,
-        page:String(page),
-        summaryOnly:'false'
+        page:String(page)
       })
       const r=await fetch('https://api.xero.com/api.xro/2.0/Invoices?'+params,{headers})
-      if(!r.ok){
-        const errText=await r.text()
-        console.error('Invoices error:',r.status,errText)
-        break
-      }
+      if(!r.ok){console.error('Invoices error:',r.status);break}
       const d=await r.json()
       const invoices=d.Invoices||[]
-
       for(const inv of invoices){
-        // Double-check type in case filter didn't work
         if(inv.Type!=='ACCPAY') continue
-        // Only count AUTHORISED or PAID bills
-        if(!['AUTHORISED','PAID'].includes(inv.Status)) continue
         const name=inv.Contact?.Name
         if(!name) continue
         const amt=parseFloat(inv.SubTotal||0)
-        spendByContact[name]=(spendByContact[name]||0)+amt
+        if(amt>0) spendByContact[name]=(spendByContact[name]||0)+amt
       }
-
       hasMore=invoices.length===100
       page++
       if(page>20) break
@@ -83,4 +97,4 @@ export default async function handler(req,res){
     console.error('Suppliers error:',e.message)
     return res.status(500).json({error:e.message})
   }
-}
+  }
