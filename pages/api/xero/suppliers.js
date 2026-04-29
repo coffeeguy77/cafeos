@@ -26,40 +26,56 @@ export default async function handler(req,res){
     const{accessToken,tenantId}=await getAccessToken(cafeId)
     const headers={'Authorization':'Bearer '+accessToken,'xero-tenant-id':tenantId,'Accept':'application/json'}
 
-    // Date range
     const to=new Date()
     const from=new Date()
     from.setMonth(from.getMonth()-parseInt(months))
     const fromStr=from.toISOString().split('T')[0]
     const toStr=to.toISOString().split('T')[0]
 
-    // Fetch all ACCPAY invoices (bills) in date range — paginated
+    // Fetch bills (ACCPAY = what we pay to suppliers)
+    // Use where filter with URL encoding for Type==ACCPAY
     const spendByContact={}
     let page=1,hasMore=true
+
     while(hasMore){
-      const url='https://api.xero.com/api.xro/2.0/Invoices?Type=ACCPAY&Status=AUTHORISED,PAID&DateFrom='+fromStr+'&DateTo='+toStr+'&page='+page+'&summaryOnly=false'
-      const r=await fetch(url,{headers})
-      if(!r.ok){console.error('Invoices error:',r.status,await r.text());break}
+      // Use the where parameter to filter by type server-side
+      const params=new URLSearchParams({
+        where:'Type=="ACCPAY"',
+        DateFrom:fromStr,
+        DateTo:toStr,
+        page:String(page),
+        summaryOnly:'false'
+      })
+      const r=await fetch('https://api.xero.com/api.xro/2.0/Invoices?'+params,{headers})
+      if(!r.ok){
+        const errText=await r.text()
+        console.error('Invoices error:',r.status,errText)
+        break
+      }
       const d=await r.json()
       const invoices=d.Invoices||[]
+
       for(const inv of invoices){
+        // Double-check type in case filter didn't work
+        if(inv.Type!=='ACCPAY') continue
+        // Only count AUTHORISED or PAID bills
+        if(!['AUTHORISED','PAID'].includes(inv.Status)) continue
         const name=inv.Contact?.Name
         if(!name) continue
         const amt=parseFloat(inv.SubTotal||0)
         spendByContact[name]=(spendByContact[name]||0)+amt
       }
+
       hasMore=invoices.length===100
       page++
-      if(page>20) break // safety cap
+      if(page>20) break
     }
 
-    // Build supplier list sorted by spend
     const suppliers=Object.entries(spendByContact)
       .map(([name,total])=>({name,total:Math.round(total*100)/100}))
       .filter(s=>s.total>0)
       .sort((a,b)=>b.total-a.total)
 
-    // Load saved mapping
     const{data:mapRow}=await supabaseAdmin.from('xero_supplier_mappings').select('mapping').eq('cafe_id',cafeId).single()
 
     return res.status(200).json({suppliers,mapping:mapRow?.mapping||{}})
