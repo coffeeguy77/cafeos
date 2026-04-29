@@ -29,46 +29,49 @@ export default async function handler(req,res){
     const to=new Date()
     const from=new Date()
     from.setMonth(from.getMonth()-parseInt(months))
+
+    // Xero DateTime filter format: DateTime(yyyy,mm,dd)
+    const xeroDate=d=>'DateTime('+d.getFullYear()+','+(d.getMonth()+1)+','+d.getDate()+')'
+    const fromXero=xeroDate(from)
+    const toXero=xeroDate(to)
     const fromStr=from.toISOString().split('T')[0]
     const toStr=to.toISOString().split('T')[0]
 
-    // Step 1: Get all contacts marked as IsSupplier=true
-    // These are contacts Xero has identified as suppliers based on AP transactions
     const spendByContact={}
-    let page=1,hasMore=true
 
+    // ── SOURCE 1: Payments against ACCPAY invoices (supplier bill payments) ──
+    // This is the canonical way to get "what did we actually pay suppliers"
+    let page=1,hasMore=true
     while(hasMore){
-      const params=new URLSearchParams({
-        where:'IsSupplier==true',
-        page:String(page),
-        includeArchived:'false'
-      })
-      const r=await fetch('https://api.xero.com/api.xro/2.0/Contacts?'+params,{headers})
-      if(!r.ok){console.error('Contacts error:',r.status,await r.text());break}
+      const where='Date>='+'DateTime('+from.getFullYear()+','+(from.getMonth()+1)+','+from.getDate()+')'
+        +'&&Date<='+'DateTime('+to.getFullYear()+','+(to.getMonth()+1)+','+to.getDate()+')'
+        +'&&Status=="AUTHORISED"'
+      const params=new URLSearchParams({where,page:String(page)})
+      const r=await fetch('https://api.xero.com/api.xro/2.0/Payments?'+params,{headers})
+      if(!r.ok){console.error('Payments error:',r.status,await r.text());break}
       const d=await r.json()
-      const contacts=d.Contacts||[]
-      for(const c of contacts){
-        if(!c.Name) continue
-        // Use PurchasesDefaultAccountCode presence + Balances to confirm they're real suppliers
-        const payable=c.Balances?.AccountsPayable?.Outstanding||0
-        const paid=c.Balances?.AccountsPayable?.Overdue||0
-        // Start with 0 - we'll add actual spend below
-        spendByContact[c.Name]=0
+      const payments=d.Payments||[]
+      for(const p of payments){
+        // Only count payments against ACCPAY (supplier) invoices
+        if(p.Invoice?.Type!=='ACCPAY') continue
+        const name=p.Invoice?.Contact?.Name
+        if(!name) continue
+        const amt=parseFloat(p.Amount||0)
+        if(amt>0) spendByContact[name]=(spendByContact[name]||0)+amt
       }
-      hasMore=contacts.length===100
+      hasMore=payments.length===100
       page++
       if(page>20) break
     }
 
-    // Step 2: Get actual spend amounts from SPEND bank transactions (Spend Money)
+    // ── SOURCE 2: Spend Money bank transactions ──
+    // Catches direct supplier payments not raised as invoices
     page=1;hasMore=true
     while(hasMore){
-      const params=new URLSearchParams({
-        where:'Type=="SPEND"',
-        fromDate:fromStr,
-        toDate:toStr,
-        page:String(page)
-      })
+      const where='Type=="SPEND"&&Status=="AUTHORISED"&&Date>='
+        +'DateTime('+from.getFullYear()+','+(from.getMonth()+1)+','+from.getDate()+')'
+        +'&&Date<='+'DateTime('+to.getFullYear()+','+(to.getMonth()+1)+','+to.getDate()+')'
+      const params=new URLSearchParams({where,page:String(page)})
       const r=await fetch('https://api.xero.com/api.xro/2.0/BankTransactions?'+params,{headers})
       if(!r.ok){console.error('BankTx error:',r.status);break}
       const d=await r.json()
@@ -77,43 +80,15 @@ export default async function handler(req,res){
         if(tx.Type!=='SPEND') continue
         const name=tx.Contact?.Name
         if(!name) continue
-        const amt=parseFloat(tx.Total||tx.SubTotal||0)
-        if(amt>0){
-          // Add to spend - include ALL contacts with spend, not just IsSupplier ones
-          spendByContact[name]=(spendByContact[name]||0)+amt
-        }
+        const amt=parseFloat(tx.Total||0)
+        if(amt>0) spendByContact[name]=(spendByContact[name]||0)+amt
       }
       hasMore=txns.length===100
       page++
       if(page>20) break
     }
 
-    // Step 3: Get ACCPAY bill amounts too (purchase invoices)
-    page=1;hasMore=true
-    while(hasMore){
-      const params=new URLSearchParams({
-        where:'Type=="ACCPAY"&&(Status=="AUTHORISED"||Status=="PAID")',
-        DateFrom:fromStr,
-        DateTo:toStr,
-        page:String(page)
-      })
-      const r=await fetch('https://api.xero.com/api.xro/2.0/Invoices?'+params,{headers})
-      if(!r.ok){break}
-      const d=await r.json()
-      const invoices=d.Invoices||[]
-      for(const inv of invoices){
-        if(inv.Type!=='ACCPAY') continue
-        const name=inv.Contact?.Name
-        if(!name) continue
-        const amt=parseFloat(inv.SubTotal||0)
-        if(amt>0) spendByContact[name]=(spendByContact[name]||0)+amt
-      }
-      hasMore=invoices.length===100
-      page++
-      if(page>20) break
-    }
-
-    // Build final list - only include contacts with actual spend > 0
+    // Build sorted list
     const suppliers=Object.entries(spendByContact)
       .map(([name,total])=>({name,total:Math.round(total*100)/100}))
       .filter(s=>s.total>0)
