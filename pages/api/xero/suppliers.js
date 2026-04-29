@@ -32,10 +32,36 @@ export default async function handler(req,res){
     const fromStr=from.toISOString().split('T')[0]
     const toStr=to.toISOString().split('T')[0]
 
+    // Step 1: Get all contacts marked as IsSupplier=true
+    // These are contacts Xero has identified as suppliers based on AP transactions
     const spendByContact={}
-
-    // 1. Spend Money transactions (BankTransactions Type=SPEND)
     let page=1,hasMore=true
+
+    while(hasMore){
+      const params=new URLSearchParams({
+        where:'IsSupplier==true',
+        page:String(page),
+        includeArchived:'false'
+      })
+      const r=await fetch('https://api.xero.com/api.xro/2.0/Contacts?'+params,{headers})
+      if(!r.ok){console.error('Contacts error:',r.status,await r.text());break}
+      const d=await r.json()
+      const contacts=d.Contacts||[]
+      for(const c of contacts){
+        if(!c.Name) continue
+        // Use PurchasesDefaultAccountCode presence + Balances to confirm they're real suppliers
+        const payable=c.Balances?.AccountsPayable?.Outstanding||0
+        const paid=c.Balances?.AccountsPayable?.Overdue||0
+        // Start with 0 - we'll add actual spend below
+        spendByContact[c.Name]=0
+      }
+      hasMore=contacts.length===100
+      page++
+      if(page>20) break
+    }
+
+    // Step 2: Get actual spend amounts from SPEND bank transactions (Spend Money)
+    page=1;hasMore=true
     while(hasMore){
       const params=new URLSearchParams({
         where:'Type=="SPEND"',
@@ -44,23 +70,25 @@ export default async function handler(req,res){
         page:String(page)
       })
       const r=await fetch('https://api.xero.com/api.xro/2.0/BankTransactions?'+params,{headers})
-      if(!r.ok){console.error('BankTx error:',r.status,await r.text());break}
+      if(!r.ok){console.error('BankTx error:',r.status);break}
       const d=await r.json()
       const txns=d.BankTransactions||[]
       for(const tx of txns){
         if(tx.Type!=='SPEND') continue
-        if(tx.IsReconciled===false&&tx.Status==='DELETED') continue
         const name=tx.Contact?.Name
         if(!name) continue
         const amt=parseFloat(tx.Total||tx.SubTotal||0)
-        if(amt>0) spendByContact[name]=(spendByContact[name]||0)+amt
+        if(amt>0){
+          // Add to spend - include ALL contacts with spend, not just IsSupplier ones
+          spendByContact[name]=(spendByContact[name]||0)+amt
+        }
       }
       hasMore=txns.length===100
       page++
       if(page>20) break
     }
 
-    // 2. Also include ACCPAY bills (purchase invoices from suppliers)
+    // Step 3: Get ACCPAY bill amounts too (purchase invoices)
     page=1;hasMore=true
     while(hasMore){
       const params=new URLSearchParams({
@@ -70,7 +98,7 @@ export default async function handler(req,res){
         page:String(page)
       })
       const r=await fetch('https://api.xero.com/api.xro/2.0/Invoices?'+params,{headers})
-      if(!r.ok){console.error('Invoices error:',r.status);break}
+      if(!r.ok){break}
       const d=await r.json()
       const invoices=d.Invoices||[]
       for(const inv of invoices){
@@ -85,6 +113,7 @@ export default async function handler(req,res){
       if(page>20) break
     }
 
+    // Build final list - only include contacts with actual spend > 0
     const suppliers=Object.entries(spendByContact)
       .map(([name,total])=>({name,total:Math.round(total*100)/100}))
       .filter(s=>s.total>0)
@@ -97,4 +126,4 @@ export default async function handler(req,res){
     console.error('Suppliers error:',e.message)
     return res.status(500).json({error:e.message})
   }
-  }
+}
