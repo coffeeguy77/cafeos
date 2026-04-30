@@ -22,57 +22,45 @@ export default async function handler(req,res){
   const{cafeId,months='12'}=req.query
   const{data:cafe}=await supabaseAdmin.from('cafes').select('id').eq('id',cafeId).eq('owner_id',user.id).single()
   if(!cafe) return res.status(403).json({error:'Forbidden'})
-
-  if(req.method==='POST'){
-    // Save wage mapping
-    const{mapping}=req.body
-    await supabaseAdmin.from('xero_wage_mappings').upsert({cafe_id:cafeId,mapping},{onConflict:'cafe_id'})
-    return res.status(200).json({ok:true})
-  }
-
   try{
     const{accessToken,tenantId}=await getAccessToken(cafeId)
     const headers={'Authorization':'Bearer '+accessToken,'xero-tenant-id':tenantId,'Accept':'application/json'}
     const to=new Date(),from=new Date()
     from.setMonth(from.getMonth()-parseInt(months))
     const xd=d=>'DateTime('+d.getFullYear()+','+(d.getMonth()+1)+','+d.getDate()+')'
-
-    // Pull SPEND bank transactions — same as suppliers
-    // Staff wages in Xero commonly appear as:
-    // - Individual name (direct bank transfer to staff)
-    // - Payclear / Keypay / Employment Hero (payroll bureau)
-    // - ATO (PAYG withholding)
-    // We return ALL spend contacts and let the user select which are wages
     const byContact={}
-    let page=1,hasMore=true
+    const add=(id,name,amt)=>{
+      if(!name||!(amt>0)) return
+      const key=id||name
+      if(!byContact[key]) byContact[key]={contactId:id||null,name,total:0,count:0}
+      byContact[key].total+=amt
+      byContact[key].count++
+    }
+
+    // SPEND bank transactions — same source as suppliers
+    // Staff wages paid via Spend Money in Xero appear here per person
+    let page=1,hasMore=true,bankStatus='ok'
     while(hasMore){
       const where='Type=="SPEND"&&Date>='+xd(from)+'&&Date<='+xd(to)
       const r=await fetch('https://api.xero.com/api.xro/2.0/BankTransactions?'+new URLSearchParams({where,page:String(page)}),{headers})
-      if(!r.ok){console.error('BankTx wages error:',r.status);break}
+      if(!r.ok){bankStatus=r.status+': '+await r.text();break}
       const d=await r.json()
       const txns=d.BankTransactions||[]
       for(const tx of txns){
         if(tx.Type!=='SPEND'||tx.Status==='DELETED'||tx.Status==='VOIDED') continue
-        const name=tx.Contact?.Name
-        if(!name) continue
-        const amt=parseFloat(tx.Total||0)
-        if(amt<=0) continue
-        const key=tx.Contact?.ContactID||name
-        if(!byContact[key]) byContact[key]={contactId:tx.Contact?.ContactID||null,name,total:0,count:0}
-        byContact[key].total+=amt
-        byContact[key].count++
+        add(tx.Contact?.ContactID,tx.Contact?.Name,parseFloat(tx.Total||0))
       }
       hasMore=txns.length===100;page++;if(page>50)break
     }
 
-    const contacts=Object.values(byContact)
+    const staff=Object.values(byContact)
       .map(s=>({...s,total:Math.round(s.total*100)/100}))
       .sort((a,b)=>b.total-a.total)
 
     const{data:mapRow}=await supabaseAdmin.from('xero_wage_mappings').select('mapping').eq('cafe_id',cafeId).single()
-    return res.status(200).json({contacts,mapping:mapRow?.mapping||{}})
+    return res.status(200).json({staff,mapping:mapRow?.mapping||{},debug:{bankStatus,count:staff.length}})
   }catch(e){
     console.error('Wages error:',e.message)
     return res.status(500).json({error:e.message})
   }
-}
+        }
